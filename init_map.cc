@@ -205,6 +205,32 @@ int main() {
   output.set_palette_color();
   output.write(&brightness[0][0]);
 
+  for (int x = 0; x < SIZE; x++) {
+    for (int y = 0; y < SIZE; y++) {
+      int a = map.altitude(x, y);
+      int w = map.water_depth(x, y);
+      int b = 0;
+      if (a > 1000) {
+        b = 10 + (a-1000)/1500;
+        if (b > 19) b = 19;
+      }
+
+      // Contour lines
+      int a2 = map.altitude(x+1, y);
+      int a3 = map.altitude(x, y+1);
+      for (int level = 3000; level < 16000; level += 1000) {
+        if (a < level && (a2 >= level || a3 >= level)) b = 2;
+        if (a >= level && (a2 < level || a3 < level)) b = 2;
+      }
+      if (w > 0) b = 1;
+      brightness[x][y] = b;
+    }
+  }
+
+  PngWriter output_map("output-map.png", SIZE, SIZE);
+  output_map.set_palette_map();
+  output_map.write(&brightness[0][0]);
+
   /* HACK: */ water_to_land(map);   calculate_slope(map);
 
   for (int x = 0; x < SIZE; x++) {

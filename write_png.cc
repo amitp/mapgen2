@@ -18,6 +18,45 @@ PngWriter::~PngWriter() {
 }
 
 
+// Colors for map palette:
+// dark sand = b19772
+// light sand = cfb78b
+// light ocean = 3d526d
+// dark ocean = 374b63
+
+
+png_color hexcolor(int rgb) {
+  png_color c;
+  c.red = rgb >> 16;
+  c.green = (rgb >> 8) & 0xff;
+  c.blue = rgb & 0xff;
+  return c;
+}
+
+
+png_color interpolate_color(png_color a, png_color b, double frac) {
+  png_color c;
+  c.red = int(a.red * (1.0-frac) + b.red * frac);
+  c.green = int(a.green * (1.0-frac) + b.green * frac);
+  c.blue = int(a.blue * (1.0-frac) + b.blue * frac);
+  return c;
+}
+
+
+void PngWriter::set_palette_map() {
+  palette = new PngPalette();
+
+  palette->P[0] = hexcolor(0x3d526d);
+  palette->P[1] = hexcolor(0x374b63);
+  palette->P[2] = hexcolor(0xa18762);  // contour lines
+  for (int i = 10; i < 20; i++) {
+    palette->P[i] = interpolate_color
+      (hexcolor(0xb19772), hexcolor(0xcfb78b), (i-10)/9.0);
+  }
+  palette->P[15] = hexcolor(0x60b030);
+}
+
+
 void PngWriter::set_palette_gray() {
   palette = new PngPalette();
 

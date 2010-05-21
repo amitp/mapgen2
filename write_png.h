@@ -12,9 +12,10 @@ class PngWriter {
     palette(0) {}
 
   ~PngWriter();
-  
+
   void set_palette_gray();
   void set_palette_color();
+  void set_palette_map();
   
   int write(unsigned char* brightness);
 
