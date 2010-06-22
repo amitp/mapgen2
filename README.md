@@ -15,7 +15,7 @@ Nice to have:
 
 *   **Nameable areas**. Forests, oceans, rivers, swamps, deserts, mountains, etc. would all be better with names.
 
-*   **Vector features** such as rivers and roads would be more useful than a bunch of tiles, so that you can use them in pathfinding and other game features.
+*   **Vector features** such as rivers and roads would be more useful than a bunch of tiles, so that you can use them in pathfinding and other game features. Depending on how experiments go, it may be useful to make the entire map vector based.
 
 Non-goals:
 
@@ -23,8 +23,10 @@ Non-goals:
 
 *   **Maze-like structures**, or areas that are disproportionately difficult to reach compared to the bird's eye distance. In particular, long peninsulas or bays are undesirable. These same features look neat on maps though, so I may change my mind. Maybe the games can have bridges or boats or other transportation shortcuts.
 
+*   **Realistic height maps**.  My goal is to make interesting 2D overhead maps, and not 3D terrain.
+
 History:
 
-*   I started out with C++ code that used mountains, soil erosion, water flow, water erosion, water evaporation, volanoes, lava flow, and other physical processes to sculpt terrain. However as described [in this blog post](http://simblob.blogspot.com/2010/06/teleological-vs-ontogenetic-map.html) I decided to abandon this approach.
+*   I started out with C++ code that used mountains, soil erosion, water flow, water erosion, water evaporation, volanoes, lava flow, and other physical processes to sculpt terrain expressed in a 2d array of tiles. However as described [in this blog post](http://simblob.blogspot.com/2010/06/teleological-vs-ontogenetic-map.html) I decided to abandon this approach.
 
-*   I am writing several small prototypes to figure out how to make rivers, coastlines, and mountains. These are the key features I want to support.
+*   Since my initial approach failed, I am writing several small prototypes to figure out how to make rivers, coastlines, and mountains. These are the key features I want to support. I will then figure out how to combine them into a map.
