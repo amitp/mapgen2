@@ -48,6 +48,11 @@ package {
                new Vector3D(600, 400), new Vector3D(300, 400));
     }
 
+
+    public static function drawLineP(g:Graphics, A:Point, B:Point, C:Point, D:Point, style:Object):Number {
+      return drawLine(g, new Vector3D(A.x, A.y), new Vector3D(B.x, B.y), new Vector3D(C.x, C.y), new Vector3D(D.x, D.y), style);
+    }
+
     
     public static function drawLine(g:Graphics, A:Vector3D, B:Vector3D, C:Vector3D, D:Vector3D, style:Object=null):Number {
       if (!style) style = {};
@@ -63,9 +68,12 @@ package {
         g.endFill();
         g.lineStyle();
       }
-      
-      if (A.subtract(C).length < 3 || B.subtract(D).length < 3) {
-        g.lineStyle(style.width? style.width:1, style.color? style.color:0x000000);
+
+      var minLength:Number = style.minLength != null? style.minLength : 3;
+      if (A.subtract(C).length < minLength || B.subtract(D).length < minLength) {
+        g.lineStyle(style.width != null? style.width:1,
+                    style.color != null? style.color:0x000000,
+                    style.alpha != null? style.alpha:1.0);
         g.moveTo(A.x, A.y);
         g.lineTo(C.x, C.y);
         return A.subtract(C).length;
