@@ -87,24 +87,29 @@ package {
       for (i = 0; i < edges.length; i++) {
         var dedge:LineSegment = edges[i].delaunayLine();
         var vedge:LineSegment = edges[i].voronoiEdge();
-        if (vedge.p0 && vedge.p1) {
+        if (vedge.p0 && vedge.p1 &&
+            ((pointToColor[dedge.p0] != 0x000099) || (pointToColor[dedge.p1] != 0x000099))) {
           var midpoint:Point = Point.interpolate(vedge.p0, vedge.p1, 0.5);
           var alpha:Number = 0.2;
 
           if ((pointToColor[dedge.p0] == 0x000099) != (pointToColor[dedge.p1] == 0x000099)) {
-            // One side is ocean and the other side is land
+            // One side is ocean and the other side is land -- coastline
             alpha = 1.0;
           }
 
-          var f:Number = 0.5;  // low: jagged vedge; high: jagged dedge
+          var f:Number = 0.6;  // low: jagged vedge; high: jagged dedge
           var p:Point = Point.interpolate(vedge.p0, dedge.p0, f);
           var q:Point = Point.interpolate(vedge.p0, dedge.p1, f);
           var r:Point = Point.interpolate(vedge.p1, dedge.p0, f);
           var s:Point = Point.interpolate(vedge.p1, dedge.p1, f);
-          drawNoisyLine(vedge.p0, midpoint, p, q, {color: 0x000000, alpha: alpha});
-          drawNoisyLine(midpoint, vedge.p1, r, s, {color: 0x000000, alpha: alpha});
-          drawNoisyLine(dedge.p0, midpoint, p, r, {color: 0xffffff, alpha: 0.3});
-          drawNoisyLine(midpoint, dedge.p1, q, s, {color: 0xffffff, alpha: 0.3});
+          drawNoisyLine(vedge.p0, midpoint, p, q, {color: 0x000000, alpha: alpha, width: 0, minLength:1});
+          drawNoisyLine(midpoint, vedge.p1, r, s, {color: 0x000000, alpha: alpha, width: 0, minLength:1});
+          if (pointToColor[dedge.p0] != 0x000099) {
+            drawNoisyLine(dedge.p0, midpoint, p, r, {color: 0xffffff, alpha: 0.2, width: 0, minLength: 1});
+          }
+          if (pointToColor[dedge.p1] != 0x000099) {
+            drawNoisyLine(midpoint, dedge.p1, q, s, {color: 0xffffff, alpha: 0.2, width: 0, minLength: 1});
+          }
         }
       }
       
