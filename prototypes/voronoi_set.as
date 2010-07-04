@@ -13,8 +13,9 @@ package {
   import com.nodename.Delaunay.Voronoi;
   
   public class voronoi_set extends Sprite {
-    static public var NUM_POINTS:int = 1000;
-    static public var ISLAND_FACTOR:Number = 1.04;  // 1.0 means no small islands; 2.0 leads to a lot
+    static public var NUM_POINTS:int = 2000;
+    static public var SIZE:int = 600;
+    static public var ISLAND_FACTOR:Number = 1.1;  // 1.0 means no small islands; 2.0 leads to a lot
     
     public function voronoi_set() {
       stage.scaleMode = 'noScale';
@@ -36,7 +37,8 @@ package {
       var i:int, j:int;
       
       var island:Object = {
-        bumps: int(3 + Math.random()*5),
+        bumps: int(1 + Math.random()*6),
+        startAngle: Math.random() * 2*Math.PI,
         dipAngle: Math.random() * 2*Math.PI,
         dipWidth: 0.2 + Math.random()*0.5
       };
@@ -45,7 +47,7 @@ package {
       var colors:Vector.<uint> = new Vector.<uint>();
       var pointToColor:Dictionary = new Dictionary();
       for (i = 0; i < NUM_POINTS; i++) {
-        var p:Point = new Point(10 + 580*Math.random(), 10 + 580*Math.random());
+        var p:Point = new Point(10 + (SIZE-20)*Math.random(), 10 + (SIZE-20)*Math.random());
 
         points.push(p);
         if (inside(island, p)) {
@@ -62,7 +64,7 @@ package {
         }
       }
 
-      var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, 600, 600));
+      var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
 
       for (i = 0; i < NUM_POINTS; i++) {
         var region:Vector.<Point> = voronoi.region(points[i]);
@@ -118,11 +120,11 @@ package {
     }
 
     public function inside(island:Object, p:Point):Boolean {
-      var q:Point = new Point(p.x-300, p.y-300);  // normalize to center of island
+      var q:Point = new Point(p.x-SIZE/2, p.y-SIZE/2);  // normalize to center of island
       var angle:Number = Math.atan2(q.y, q.x);
       var length:Number = 0.5 * (Math.max(Math.abs(q.x), Math.abs(q.y)) + q.length);
-      var r1:Number = 150 + 60*Math.sin(island.bumps*angle + Math.cos((island.bumps+3)*angle));
-      var r2:Number = 200 - 60*Math.sin(island.bumps*angle - Math.sin((island.bumps+2)*angle));
+      var r1:Number = SIZE*(0.25 + 0.1*Math.sin(island.startAngle + island.bumps*angle + Math.cos((island.bumps+3)*angle)));
+      var r2:Number = SIZE*(0.30 - 0.1*Math.sin(island.startAngle + island.bumps*angle - Math.sin((island.bumps+2)*angle)));
       if (Math.abs(angle - island.dipAngle) < island.dipWidth
           || Math.abs(angle - island.dipAngle + 2*Math.PI) < island.dipWidth
           || Math.abs(angle - island.dipAngle - 2*Math.PI) < island.dipWidth) {
