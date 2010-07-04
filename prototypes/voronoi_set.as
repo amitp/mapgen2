@@ -49,21 +49,20 @@ package {
 
         points.push(p);
         if (inside(island, p)) {
-          if (Math.random() < 0.2) {
-            colors.push(0x779900);
-          } else {
-            colors.push(0x009900);
-          }
+          colors.push(0x009900);
         } else {
           colors.push(0x000099);
         }
         pointToColor[p] = colors[i];
-        graphics.beginFill(colors[i], colors[i] == 0x000099? 0.2 : 1.0);
-        graphics.drawCircle(p.x, p.y, 2.5);
-        graphics.endFill();
+
+        if (colors[i] == 0x000099) {
+          graphics.beginFill(colors[i], colors[i] == 0x000099? 0.2 : 0.0);
+          graphics.drawCircle(p.x, p.y, 2.5);
+          graphics.endFill();
+        }
       }
 
-      var voronoi:Voronoi = new Voronoi(points, colors, new Rectangle(0, 0, 600, 600));
+      var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, 600, 600));
 
       var corners:Dictionary = new Dictionary();
       for (i = 0; i < NUM_POINTS; i++) {
