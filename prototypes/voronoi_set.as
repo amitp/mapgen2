@@ -64,7 +64,6 @@ package {
 
       var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, 600, 600));
 
-      var corners:Dictionary = new Dictionary();
       for (i = 0; i < NUM_POINTS; i++) {
         var region:Vector.<Point> = voronoi.region(points[i]);
         graphics.beginFill(colors[i], 0.4);
@@ -72,8 +71,6 @@ package {
         // graphics.lineStyle(1, 0x000000, 0.2);
         for (j = 0; j < region.length; j++) {
           graphics.lineTo(region[j].x, region[j].y);
-          if (!corners[region[j]]) corners[region[j]] = 0;
-          corners[region[j]] = corners[region[j]] + 1;
         }
         graphics.endFill();
         graphics.lineStyle();
@@ -113,13 +110,6 @@ package {
       }
       
       graphics.lineStyle();
-      
-      for (var corner:Object in corners) {
-        var count:int = corners[corner];
-        graphics.beginFill(0x000000, 0.05);
-        graphics.drawCircle(Point(corner).x, Point(corner).y, 1.5);
-        graphics.endFill();
-      }
 
     }
 
