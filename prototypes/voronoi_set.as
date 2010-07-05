@@ -229,11 +229,53 @@ package {
       }
     }
 
+
+    // Build graph data structure in the 'attr' objects, based on
+    // information in the Voronoi results: attr[point].neighbors will
+    // be a list of neighboring points of the same type (corner or
+    // center); attr[point].edges will be a list of edges that include
+    // that point. Each edge connects to four points: the Voronoi edge
+    // attr[edge].{v0,v1} and its dual Delaunay triangle edge
+    // attr[edge].{d0,d1}.  For boundary polygons, the Delaunay edge
+    // will have one null point, and the Voronoi edge may be null.
+    public function buildGraph(voronoi:Voronoi, attr:Dictionary):void {
+      var edges:Vector.<Edge> = voronoi.edges();
+      for each (var edge:Edge in edges) {
+          var dedge:LineSegment = edge.delaunayLine();
+          var vedge:LineSegment = edge.voronoiEdge();
+
+          // Per point attributes: neighbors and edges
+          for each (var point:Point in [dedge.p0, dedge.p1, vedge.p0, vedge.p1]) {
+              if (point == null) { continue; }
+              if (attr[point] == null) attr[point] = {};
+              if (attr[point].edges == null) attr[point].edges = new Vector.<Edge>();
+              if (attr[point].neighbors == null) attr[point].neighbors = new Vector.<Point>();
+              attr[point].edges.push(edge);
+            }
+          if (dedge.p0 != null && dedge.p1 != null) {
+            attr[dedge.p0].neighbors.push(dedge.p1);
+            attr[dedge.p1].neighbors.push(dedge.p0);
+          }
+          if (vedge.p0 != null && vedge.p1 != null) {
+            attr[vedge.p0].neighbors.push(vedge.p1);
+            attr[vedge.p1].neighbors.push(vedge.p0);
+          }
+          
+          // Per edge attributes
+          attr[edge] = {};
+          attr[edge].v0 = vedge.p0;
+          attr[edge].v1 = vedge.p1;
+          attr[edge].d0 = dedge.p0;
+          attr[edge].d1 = dedge.p1;
+        }
+    }
+
     
     // Draw a noisy line from p to q, enclosed by the boundary points
     // a and b.  Points p-a-q-b form a quadrilateral, and the noisy
     // line will be inside of it.
     public function drawNoisyLine(p:Point, q:Point, a:Point, b:Point, style:Object=null):void {
+      // TODO: we actually want two line widths, one for p and one for q
       noisy_line.drawLineP(graphics, p, a, q, b, style);
       graphics.lineStyle();
     }
