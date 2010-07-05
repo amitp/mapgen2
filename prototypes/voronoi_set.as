@@ -85,32 +85,33 @@ package {
 
         // Determine the color of this polygon
         if (attr[p].ocean) {
-          attr[p].color = 0x000099;
+          attr[p].color = 0x555599;
         } else if (attr[p].water) {
-          attr[p].color = 0x0099cc;
-          if (attr[p].elevation == 0) attr[p].color = 0x005544; /* swamp */
+          attr[p].color = 0x336699;
+          if (attr[p].elevation == 0) attr[p].color = 0x000099; /* swamp? */
           if (attr[p].elevation > 7) attr[p].color = 0x99ffff; /* ice */
         } else if (attr[p].coast) {
-          attr[p].color = 0xcccc99;
+          attr[p].color = 0xb0b099;  // beach
         } else if (attr[p].elevation > 9) {
-          attr[p].color = 0xff0000;
+          attr[p].color = 0xcc5555;  // lava
         } else if (attr[p].elevation > 7) {
-          attr[p].color = 0xffffff;
+          attr[p].color = 0xeeeeee;  // ice
         } else if (attr[p].elevation > 6) {
-          attr[p].color = 0xccee88;
+          attr[p].color = 0xaacc88;  // dry grasslands
         } else if (attr[p].elevation > 4.5) {
-          attr[p].color = 0x99cc00;
+          attr[p].color = 0x99aa55;  // grasslands
         } else if (attr[p].elevation > 2.5) {
-          attr[p].color = 0x55bb00;
+          attr[p].color = 0x77aa55;  // grasslands
         }  else if (attr[p].elevation > 0) {
-          attr[p].color = 0x00aa00;
+          attr[p].color = 0x559955;  // wet grasslands
         } else {
-          attr[p].color = 0x008822;
+          attr[p].color = 0x558866;  // swampy
         }
         
         var neighbors:Vector.<Point> = voronoi.neighborSitesForSite(p);
         for each (q in neighbors) {
-            var newElevation:Number = attr[p].elevation;
+            var newElevation:Number = 0.01 + attr[p].elevation;
+            var changed:Boolean = false;
             if (!attr[q].water && !attr[p].water) {
               newElevation += 0.5 + Math.random();
               if (p.x > q.x && newElevation > 1) {
@@ -119,22 +120,52 @@ package {
               }
             }
             if (attr[q].elevation == null || newElevation < attr[q].elevation) {
-              if (attr[p].ocean) {
-                if (attr[q].water) {
-                  // Oceans are all connected, but some bodies of water
-                  // are not connected to oceans.
-                  attr[q].ocean = true;
-                } else {
-                  // Coasts are land, but connected to oceans
-                  attr[q].coast = true;
-                }
-              }
               attr[q].elevation = newElevation;
+              changed = true;
+            }
+            if (attr[p].ocean && attr[q].water && !attr[q].ocean) {
+              // Oceans are all connected, but some bodies of water
+              // are not connected to oceans.
+              attr[q].ocean = true;
+              changed = true;
+            }
+            if (attr[p].ocean && !attr[q].ocean && !attr[q].coast) {
+              // Coasts are land, but connected to oceans
+              attr[q].coast = true;
+              changed = true;
+            }
+            if (changed) {
               queue.push(q);
             }
           }
       }
-        
+
+      // Determine downslope paths
+      for each (p in points) {
+          neighbors = voronoi.neighborSitesForSite(p);
+          r = p;
+          for each (q in neighbors) {
+              if (attr[q].elevation <= attr[r].elevation) {
+                r = q;
+              }
+            }
+          attr[p].downslope = r;
+        }
+
+      
+      // Create rivers. Pick a random point, then move downslope
+      for (i = 0; i < SIZE; i++) {
+        p = points[int(Math.random() * NUM_POINTS)];
+        if (attr[p].elevation < 6 || attr[p].elevation > 9) continue;
+        while (!attr[p].ocean) {
+          if (attr[p].river == null) attr[p].river = 0;
+          attr[p].river = attr[p].river + 1;
+          if (attr[p].downslope == p) break;
+          p = attr[p].downslope;
+        }
+      }
+
+      
       // Draw the polygons. TODO: we're drawing them with the original
       // edges, but we really want to draw them with the noisy
       // edges. Need to figure out how to record noisy edge path so
@@ -142,22 +173,23 @@ package {
       for (i = 0; i < NUM_POINTS; i++) {
         var region:Vector.<Point> = voronoi.region(points[i]);
 
-        if (attr[points[i]].ocean) {
-          // For oceans we also draw the point that generated the polygon
-          graphics.beginFill(attr[points[i]].color, 0.2);
-          graphics.drawCircle(points[i].x, points[i].y, 2.5);
-          graphics.endFill();
-        }
-
-        graphics.beginFill(attr[points[i]].color, 0.5);
+        graphics.beginFill(attr[points[i]].color);
         graphics.moveTo(region[region.length-1].x, region[region.length-1].y);
         for (j = 0; j < region.length; j++) {
           graphics.lineTo(region[j].x, region[j].y);
         }
         graphics.endFill();
         graphics.lineStyle();
+        
+        if (attr[points[i]].ocean) {
+          // For oceans we also draw the point that generated the polygon
+          graphics.beginFill(0x000000, 0.1);
+          graphics.drawCircle(points[i].x, points[i].y, 2);
+          graphics.endFill();
+        }
       }
 
+      
       // Draw noisy Voronoi edges and Delaunay edges
       var edges:Vector.<Edge> = voronoi.edges();
       for (i = 0; i < edges.length; i++) {
@@ -166,11 +198,14 @@ package {
         if (vedge.p0 && vedge.p1 &&
             (!attr[dedge.p0].ocean || !attr[dedge.p1].ocean)) {
           var midpoint:Point = Point.interpolate(vedge.p0, vedge.p1, 0.5);
-          var alpha:Number = 0.1;
+          var alpha:Number = 0.03;
 
           if (attr[dedge.p0].ocean != attr[dedge.p1].ocean) {
             // One side is ocean and the other side is land -- coastline
             alpha = 1.0;
+          } else if (attr[dedge.p0].color != attr[dedge.p1].color) {
+            // Terrain boundary -- emphasize a bit
+            alpha = 0.1;
           }
 
           var f:Number = 0.6;  // low: jagged vedge; high: jagged dedge
@@ -180,16 +215,21 @@ package {
           var s:Point = Point.interpolate(vedge.p1, dedge.p1, f);
           drawNoisyLine(vedge.p0, midpoint, p, q, {color: 0x000000, alpha: alpha, width: 0, minLength:2});
           drawNoisyLine(midpoint, vedge.p1, r, s, {color: 0x000000, alpha: alpha, width: 0, minLength:2});
-          if (!attr[dedge.p0].ocean) {
-            drawNoisyLine(dedge.p0, midpoint, p, r, {color: 0xffffff, alpha: 0.1, width: 0, minLength: 2});
-          }
-          if (!attr[dedge.p1].ocean) {
-            drawNoisyLine(midpoint, dedge.p1, q, s, {color: 0xffffff, alpha: 0.1, width: 0, minLength: 2});
+          if ((attr[dedge.p0].downslope == dedge.p1 || attr[dedge.p1].downslope == dedge.p0)
+              && ((attr[dedge.p0].water || attr[dedge.p0].river)
+                  && (attr[dedge.p1].water || attr[dedge.p1].river))) {
+            if (attr[dedge.p0].river && !attr[dedge.p0].water) {
+              drawNoisyLine(dedge.p0, midpoint, p, r, {color: 0x336699, width: Math.sqrt(attr[dedge.p0].river), minLength: 2});
+            }
+            if (attr[dedge.p1].river && !attr[dedge.p1].water) {
+              drawNoisyLine(midpoint, dedge.p1, q, s, {color: 0x336699, width: Math.sqrt(attr[dedge.p1].river), minLength: 2});
+            }
           }
         }
       }
     }
 
+    
     // Draw a noisy line from p to q, enclosed by the boundary points
     // a and b.  Points p-a-q-b form a quadrilateral, and the noisy
     // line will be inside of it.
