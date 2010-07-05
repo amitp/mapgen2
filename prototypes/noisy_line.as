@@ -100,6 +100,49 @@ package {
         + drawLine(g, H, interpolate(F, C, s), C, interpolate(I, D, t), style);
     }
 
+
+    public static function buildLineSegments(A:Point, B:Point, C:Point, D:Point, minLength:Number):Vector.<Point> {
+      var points:Vector.<Point> = new Vector.<Point>();
+      
+      function subdivide(A:Point, B:Point, C:Point, D:Point):void {
+        if (A.subtract(C).length < minLength || B.subtract(D).length < minLength) {
+          points.push(C);
+          return;
+        }
+        
+        // Subdivide the quadrilateral
+        var p:Number = random(0.1, 0.9);  // vertical (along A-D and B-C)
+        var q:Number = random(0.3, 0.7);  // horizontal (along A-B and D-C)
+        
+        // Increase noise level by pushing away from the center
+        if (p < 0.5) p = 0.5*p; else p = 0.5+0.5*p;
+        if (q < 0.5) q = 0.5*q; else q = 0.5+0.5*q;
+        
+        // Midpoints
+        var E:Point = interpolateP(A, D, p);
+        var F:Point = interpolateP(B, C, p);
+        var G:Point = interpolateP(A, B, q);
+        var I:Point = interpolateP(D, C, q);
+        
+        // Central point
+        var H:Point = interpolateP(E, F, q);
+        
+        // Divide the quad into subquads, but meet at H
+        var s:Number = random(-0.4, 0.4);
+        var t:Number = random(-0.4, 0.4);
+        
+        subdivide(A, interpolateP(G, B, s), H, interpolateP(E, D, t));
+        points.push(H);
+        subdivide(H, interpolateP(F, C, s), C, interpolateP(I, D, t));
+      }
+
+      points.push(A);
+      subdivide(A, B, C, D);
+      points.push(C);
+      return points;
+    }
+    
+      
     // Convenience: random number in a range
     public static function random(low:Number, high:Number):Number {
       return low + (high-low) * Math.random();
@@ -111,6 +154,8 @@ package {
       return new Vector3D(p.x*(1-f) + q.x*f, p.y*(1-f) + q.y*f, p.z*(1-f) + q.z*f);
     }
 
-    
+    public static function interpolateP(p:Point, q:Point, f:Number):Point {
+      return Point.interpolate(p, q, 1.0-f);
+    }
   }
 }

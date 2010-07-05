@@ -22,15 +22,14 @@ package {
       stage.align = 'TL';
 
       addChild(new Debug(this));
-      
-      go();
 
       stage.addEventListener(MouseEvent.CLICK, function (e:MouseEvent):void { go(); } );
+      go();
     }
 
     public function go():void {
       graphics.clear();
-      graphics.beginFill(0x999999);
+      graphics.beginFill(0x555599);
       graphics.drawRect(-1000, -1000, 2000, 2000);
       graphics.endFill();
 
@@ -63,14 +62,30 @@ package {
 
       var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
 
-      // Determine the elevations, oceans, and colors
+      // Create a graph structure from the voronoi edge list
+      for each (p in points) {
+          // Workaround for Voronoi lib bug: we need to call region()
+          // before Edges or neighboringSites are available
+          voronoi.region(p);
+        }
+      buildGraph(voronoi, attr);
+      
+      // Determine the elevations, oceans, and colors. By
+      // construction, we have no local minima. This is important for
+      // the downslope vectors later, which are used in the river
+      // construction algorithm. Also by construction, inlets/bays
+      // push low elevation areas inland, which means many rivers end
+      // up flowing out through them. Also by construction, lakes
+      // often end up on river paths because they don't raise the
+      // elevation as much as other terrain does. TODO: there are
+      // rivers that are not reaching the sea, possibly because of
+      // loops in the downslope graph; need to investigate. This may
+      // be because neighboringSites considers corner matches and the
+      // Edge list does not.  TODO: there are points that aren't being
+      // reached from this loop. Why?? We probably need to force the
+      // edges of the map to be ocean, altitude 0.
       var queue:Array = [];
       for each (p in points) {
-          // Work around a bug in Voronoi.as: we need to call region()
-          // on everything before we're allowed to call
-          // neighborSitesForSite().
-          /* result ignored */ voronoi.region(p);
-
           // Start with a seed ocean in the upper left, and let it
           // spread through anything already marked as ocean
           if (p.x < 50 && p.y < 50) {
@@ -88,14 +103,17 @@ package {
           attr[p].color = 0x555599;
         } else if (attr[p].water) {
           attr[p].color = 0x336699;
-          if (attr[p].elevation == 0) attr[p].color = 0x000099; /* swamp? */
+          if (attr[p].elevation < 0.1) attr[p].color = 0x226677; /* swamp?? not sure */
           if (attr[p].elevation > 7) attr[p].color = 0x99ffff; /* ice */
+          if (attr[p].elevation > 9) attr[p].color = 0x333333; /* scorched? */
         } else if (attr[p].coast) {
           attr[p].color = 0xb0b099;  // beach
         } else if (attr[p].elevation > 9) {
-          attr[p].color = 0xcc5555;  // lava
+          attr[p].color = 0xcc3333;  // lava
+        } else if (attr[p].elevation > 8.5) {
+          attr[p].color = 0x666666;  // scorched
         } else if (attr[p].elevation > 7) {
-          attr[p].color = 0xeeeeee;  // ice
+          attr[p].color = 0xffffff;  // ice
         } else if (attr[p].elevation > 6) {
           attr[p].color = 0xaacc88;  // dry grasslands
         } else if (attr[p].elevation > 4.5) {
@@ -108,8 +126,7 @@ package {
           attr[p].color = 0x558866;  // swampy
         }
         
-        var neighbors:Vector.<Point> = voronoi.neighborSitesForSite(p);
-        for each (q in neighbors) {
+        for each (q in attr[p].neighbors) {
             var newElevation:Number = 0.01 + attr[p].elevation;
             var changed:Boolean = false;
             if (!attr[q].water && !attr[p].water) {
@@ -140,11 +157,11 @@ package {
           }
       }
 
+      
       // Determine downslope paths
       for each (p in points) {
-          neighbors = voronoi.neighborSitesForSite(p);
           r = p;
-          for each (q in neighbors) {
+          for each (q in attr[p].neighbors) {
               if (attr[q].elevation <= attr[r].elevation) {
                 r = q;
               }
@@ -154,43 +171,66 @@ package {
 
       
       // Create rivers. Pick a random point, then move downslope
-      for (i = 0; i < SIZE; i++) {
+      for (i = 0; i < SIZE/3; i++) {
         p = points[int(Math.random() * NUM_POINTS)];
-        if (attr[p].elevation < 6 || attr[p].elevation > 9) continue;
+        if (attr[p].water || attr[p].elevation < 5 || attr[p].elevation > 9) continue;
         while (!attr[p].ocean) {
           if (attr[p].river == null) attr[p].river = 0;
           attr[p].river = attr[p].river + 1;
-          if (attr[p].downslope == p) break;
+          if (p == attr[p].downslope) {
+            Debug.trace("Downslope failed", attr[p].elevation);
+            break;
+          }
           p = attr[p].downslope;
         }
       }
 
-      
-      // Draw the polygons. TODO: we're drawing them with the original
-      // edges, but we really want to draw them with the noisy
-      // edges. Need to figure out how to record noisy edge path so
-      // that we can find it again indexed by polygon, not by edge.
-      for (i = 0; i < NUM_POINTS; i++) {
-        var region:Vector.<Point> = voronoi.region(points[i]);
+      // For all edges between polygons, build a noisy line path that
+      // we can reuse while drawing both polygons connected to that edge
+      buildNoisyEdges(points, attr);
 
-        graphics.beginFill(attr[points[i]].color);
-        graphics.moveTo(region[region.length-1].x, region[region.length-1].y);
-        for (j = 0; j < region.length; j++) {
-          graphics.lineTo(region[j].x, region[j].y);
+      // Draw the polygons.
+      for each (p in points) {
+          function drawPathForwards(path:Vector.<Point>):void {
+            for (var i:int = 0; i < path.length; i++) {
+              graphics.lineTo(path[i].x, path[i].y);
+            }
+          }
+          function drawPathBackwards(path:Vector.<Point>):void {
+            for (var i:int = path.length-1; i >= 0; i--) {
+              graphics.lineTo(path[i].x, path[i].y);
+            }
+          }
+          for each (q in attr[p].neighbors) {
+              graphics.beginBitmapFill(getBitmapTexture(attr[p].color));
+              graphics.moveTo(p.x, p.y);
+              var edge:Edge = lookupEdge(p, q, attr);
+              if (attr[edge].path0 == null || attr[edge].path1 == null) {
+                continue;
+                Debug.trace("NULL PATH", attr[edge].d0 == p, attr[edge].d0 == q);
+              }
+              graphics.lineTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
+              if (attr[p].ocean != attr[q].ocean) {
+                // One side is ocean and the other side is land -- coastline
+                graphics.lineStyle(1, 0x000000);
+              } else if (attr[p].water != attr[q].water) {
+                // Lake boundary
+                graphics.lineStyle(1, 0x003366, 0.5);
+              } else if (attr[p].color != attr[q].color) {
+                // Terrain boundary -- emphasize a bit
+                graphics.lineStyle(1, 0x000000, 0.05);
+              }
+              drawPathForwards(attr[edge].path0);
+              drawPathBackwards(attr[edge].path1);
+                graphics.lineStyle();
+              graphics.lineTo(p.x, p.y);
+              graphics.endFill();
+            }
         }
-        graphics.endFill();
-        graphics.lineStyle();
-        
-        if (attr[points[i]].ocean) {
-          // For oceans we also draw the point that generated the polygon
-          graphics.beginFill(0x000000, 0.1);
-          graphics.drawCircle(points[i].x, points[i].y, 2);
-          graphics.endFill();
-        }
-      }
-
       
-      // Draw noisy Voronoi edges and Delaunay edges
+      var p:Point, q:Point, r:Point, s:Point;
+
+      // Draw rivers. TODO: refactor to share code with buildNoisyEdges()
       var edges:Vector.<Edge> = voronoi.edges();
       for (i = 0; i < edges.length; i++) {
         var dedge:LineSegment = edges[i].delaunayLine();
@@ -200,21 +240,11 @@ package {
           var midpoint:Point = Point.interpolate(vedge.p0, vedge.p1, 0.5);
           var alpha:Number = 0.03;
 
-          if (attr[dedge.p0].ocean != attr[dedge.p1].ocean) {
-            // One side is ocean and the other side is land -- coastline
-            alpha = 1.0;
-          } else if (attr[dedge.p0].color != attr[dedge.p1].color) {
-            // Terrain boundary -- emphasize a bit
-            alpha = 0.1;
-          }
-
           var f:Number = 0.6;  // low: jagged vedge; high: jagged dedge
-          var p:Point = Point.interpolate(vedge.p0, dedge.p0, f);
-          var q:Point = Point.interpolate(vedge.p0, dedge.p1, f);
-          var r:Point = Point.interpolate(vedge.p1, dedge.p0, f);
-          var s:Point = Point.interpolate(vedge.p1, dedge.p1, f);
-          drawNoisyLine(vedge.p0, midpoint, p, q, {color: 0x000000, alpha: alpha, width: 0, minLength:2});
-          drawNoisyLine(midpoint, vedge.p1, r, s, {color: 0x000000, alpha: alpha, width: 0, minLength:2});
+          p = Point.interpolate(vedge.p0, dedge.p0, f);
+          q = Point.interpolate(vedge.p0, dedge.p1, f);
+          r = Point.interpolate(vedge.p1, dedge.p0, f);
+          s = Point.interpolate(vedge.p1, dedge.p1, f);
           if ((attr[dedge.p0].downslope == dedge.p1 || attr[dedge.p1].downslope == dedge.p0)
               && ((attr[dedge.p0].water || attr[dedge.p0].river)
                   && (attr[dedge.p1].water || attr[dedge.p1].river))) {
@@ -270,6 +300,42 @@ package {
         }
     }
 
+
+    // Build noisy line paths for each of the Voronoi edges. There are
+    // two noisy line paths for each edge, each covering half the
+    // distance: attr[edge].path0 will be from v0 to the midpoint and
+    // attr[edge].path1 will be from v1 to the midpoint. When drawing
+    // the polygons, one or the other must be drawn in reverse order.
+    public function buildNoisyEdges(points:Vector.<Point>, attr:Dictionary):void {
+      var _count:int = 0;
+      for each (var point:Point in points) {
+          for each (var edge:Edge in attr[point].edges) {
+              if (attr[edge].d0 && attr[edge].d1 && attr[edge].v0 && attr[edge].v1
+                  && !attr[edge].path0) {
+                var f:Number = 0.6;  // low: jagged vedge; high: jagged dedge
+                var midpoint:Point = Point.interpolate(attr[edge].v0, attr[edge].v1, 0.5);
+                var p:Point = Point.interpolate(attr[edge].v0, attr[edge].d0, f);
+                var q:Point = Point.interpolate(attr[edge].v0, attr[edge].d1, f);
+                var r:Point = Point.interpolate(attr[edge].v1, attr[edge].d0, f);
+                var s:Point = Point.interpolate(attr[edge].v1, attr[edge].d1, f);
+
+                attr[edge].path0 = noisy_line.buildLineSegments(attr[edge].v0, p, midpoint, q, 1);
+                attr[edge].path1 = noisy_line.buildLineSegments(attr[edge].v1, s, midpoint, r, 1);
+                _count++;
+              }
+            }
+        }
+    }
+    
+
+    // Look up a Voronoi Edge object given two adjacent Voronoi polygons
+    public function lookupEdge(p:Point, q:Point, attr:Dictionary):Edge {
+      for each (var edge:Edge in attr[p].edges) {
+          if (attr[edge].d0 == q || attr[edge].d1 == q) return edge;
+        }
+      return null;
+    }
+
     
     // Draw a noisy line from p to q, enclosed by the boundary points
     // a and b.  Points p-a-q-b form a quadrilateral, and the noisy
@@ -280,6 +346,7 @@ package {
       graphics.lineStyle();
     }
 
+    
     // Determine whether a given point should be on the island or in the water.
     public function inside(island:Object, p:Point):Boolean {
       var q:Point = new Point(p.x-SIZE/2, p.y-SIZE/2);  // normalize to center of island
@@ -293,6 +360,38 @@ package {
         r1 = r2 = 0.2;
       }
       return  (length < r1 || (length > r1*ISLAND_FACTOR && length < r2));
+    }
+
+
+    // Build a noisy bitmap tile for a given color
+    private var _textures:Array = [];
+    public function getBitmapTexture(color:uint):BitmapData {
+      if (!_textures[color]) {
+        var texture:BitmapData = new BitmapData(256, 256);
+        texture.noise(487 + color /* random seed */);
+        var paletteMap:Array = new Array(256);
+        var zeroMap:Array = new Array(256);
+        for (var i:int = 0; i < 256; i++) {
+          var level:Number = 0.9 + 0.2 * (i / 255.0);
+
+          /* special case */ if (color == 0xffffff) level = 0.95 + 0.1 * (i / 255.0);
+          
+          var r:int = level * (color >> 16);
+          var g:int = level * ((color >> 8) & 0xff);
+          var b:int = level * (color & 0xff);
+
+          if (r < 0) r = 0; if (r > 255) r = 255;
+          if (g < 0) g = 0; if (g > 255) g = 255;
+          if (b < 0) b = 0; if (b > 255) b = 255;
+          
+          paletteMap[i] = 0xff000000 | (r << 16) | (g << 8) | b;
+          zeroMap[i] = 0x00000000;
+        }
+        texture.paletteMap(texture, texture.rect, new Point(0, 0),
+                           paletteMap, zeroMap, zeroMap, zeroMap);
+        _textures[color] = texture;
+      }
+      return _textures[color];
     }
   }
 }
