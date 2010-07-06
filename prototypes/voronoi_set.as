@@ -130,6 +130,18 @@ package {
       }
 
 
+      // Rescale elevations so that the highest is 10
+      var maxElevation:Number = 0.0;
+      for each (p in points) {
+          if (attr[p].elevation > maxElevation) {
+            maxElevation = attr[p].elevation;
+          }
+        }
+      for each (p in points) {
+          attr[p].elevation = attr[p].elevation * 10 / maxElevation;
+        }
+
+
       // Color the polygons based on elevation, water, ocean
       for each (p in points) {
           if (attr[p].ocean) {
