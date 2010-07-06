@@ -16,6 +16,22 @@ package {
     static public var NUM_POINTS:int = 2000;
     static public var SIZE:int = 600;
     static public var ISLAND_FACTOR:Number = 1.1;  // 1.0 means no small islands; 2.0 leads to a lot
+
+    static public var colors:Object = {
+      OCEAN: 0x555599,
+      WATER: 0x336699,
+      SWAMP: 0x226677,
+      ICE: 0x99ffff,
+      SCORCHED: 0x333333,
+      BEACH: 0xb0b099,
+      LAVA: 0xcc3333,
+      SNOW: 0xffffff,
+      SAVANNAH: 0xaacc88,
+      GRASSLANDS: 0x99aa55,
+      DRY_FOREST: 0x77aa55,
+      RAIN_FOREST: 0x559955,
+      SWAMP: 0x558866
+    };
     
     public function voronoi_set() {
       stage.scaleMode = 'noScale';
@@ -70,20 +86,16 @@ package {
         }
       buildGraph(voronoi, attr);
       
-      // Determine the elevations, oceans, and colors. By
-      // construction, we have no local minima. This is important for
-      // the downslope vectors later, which are used in the river
-      // construction algorithm. Also by construction, inlets/bays
-      // push low elevation areas inland, which means many rivers end
-      // up flowing out through them. Also by construction, lakes
-      // often end up on river paths because they don't raise the
-      // elevation as much as other terrain does. TODO: there are
-      // rivers that are not reaching the sea, possibly because of
-      // loops in the downslope graph; need to investigate. This may
-      // be because neighboringSites considers corner matches and the
-      // Edge list does not.  TODO: there are points that aren't being
-      // reached from this loop. Why?? We probably need to force the
-      // edges of the map to be ocean, altitude 0.
+      // Determine the elevations and oceans. By construction, we have
+      // no local minima. This is important for the downslope vectors
+      // later, which are used in the river construction
+      // algorithm. Also by construction, inlets/bays push low
+      // elevation areas inland, which means many rivers end up
+      // flowing out through them. Also by construction, lakes often
+      // end up on river paths because they don't raise the elevation
+      // as much as other terrain does. TODO: there are points that
+      // aren't being reached from this loop. Why?? We probably need
+      // to force the edges of the map to be ocean, altitude 0.
       var queue:Array = [];
       for each (p in points) {
           // Start with a seed ocean in the upper left, and let it
@@ -142,33 +154,33 @@ package {
         }
 
 
-      // Color the polygons based on elevation, water, ocean
+      // Choose polygon biomes based on elevation, water, ocean
       for each (p in points) {
           if (attr[p].ocean) {
-            attr[p].color = 0x555599;
+            attr[p].biome = 'OCEAN';
           } else if (attr[p].water) {
-            attr[p].color = 0x336699;
-            if (attr[p].elevation < 0.1) attr[p].color = 0x226677; /* swamp?? not sure */
-            if (attr[p].elevation > 7) attr[p].color = 0x99ffff; /* ice */
-            if (attr[p].elevation > 9) attr[p].color = 0x333333; /* scorched? */
+            attr[p].biome = 'WATER';
+            if (attr[p].elevation < 0.1) attr[p].biome = 'SWAMP';
+            if (attr[p].elevation > 7) attr[p].biome = 'ICE';
+            if (attr[p].elevation > 9) attr[p].biome = 'SCORCHED';
           } else if (attr[p].coast) {
-            attr[p].color = 0xb0b099;  // beach
+            attr[p].biome = 'BEACH';
           } else if (attr[p].elevation > 9) {
-            attr[p].color = 0xcc3333;  // lava
+            attr[p].biome = 'LAVA';
           } else if (attr[p].elevation > 8.5) {
-            attr[p].color = 0x666666;  // scorched
+            attr[p].biome = 'SCORCHED';
           } else if (attr[p].elevation > 7) {
-            attr[p].color = 0xffffff;  // ice
+            attr[p].biome = 'SNOW';
           } else if (attr[p].elevation > 6) {
-            attr[p].color = 0xaacc88;  // dry grasslands
+            attr[p].biome = 'SAVANNAH'; 
           } else if (attr[p].elevation > 4.5) {
-            attr[p].color = 0x99aa55;  // grasslands
+            attr[p].biome = 'GRASSLANDS';
           } else if (attr[p].elevation > 2.5) {
-            attr[p].color = 0x77aa55;  // grasslands
+            attr[p].biome = 'DRY_FOREST';
           }  else if (attr[p].elevation > 0) {
-            attr[p].color = 0x559955;  // wet grasslands
+            attr[p].biome = 'RAIN_FOREST';
           } else {
-            attr[p].color = 0x558866;  // swampy
+            attr[p].biome = 'SWAMP';
           }
         }
                               
@@ -216,7 +228,7 @@ package {
             }
           }
           for each (q in attr[p].neighbors) {
-              graphics.beginBitmapFill(getBitmapTexture(attr[p].color));
+              graphics.beginBitmapFill(getBitmapTexture(colors[attr[p].biome]));
               graphics.moveTo(p.x, p.y);
               var edge:Edge = lookupEdge(p, q, attr);
               if (attr[edge].path0 == null || attr[edge].path1 == null) {
@@ -230,7 +242,7 @@ package {
               } else if (attr[p].water != attr[q].water) {
                 // Lake boundary
                 graphics.lineStyle(1, 0x003366, 0.5);
-              } else if (attr[p].color != attr[q].color) {
+              } else if (attr[p].biome != attr[q].biome) {
                 // Terrain boundary -- emphasize a bit
                 graphics.lineStyle(1, 0x000000, 0.05);
               }
