@@ -263,10 +263,10 @@ package {
               && ((attr[dedge.p0].water || attr[dedge.p0].river)
                   && (attr[dedge.p1].water || attr[dedge.p1].river))) {
             if (attr[dedge.p0].river && !attr[dedge.p0].water) {
-              drawNoisyLine(dedge.p0, midpoint, p, r, {color: 0x336699, width: Math.sqrt(attr[dedge.p0].river), minLength: 2});
+              noisy_line.drawLineP(graphics, dedge.p0, p, midpoint, r, {color: 0x336699, width: Math.sqrt(attr[dedge.p0].river), minLength: 2});
             }
             if (attr[dedge.p1].river && !attr[dedge.p1].water) {
-              drawNoisyLine(midpoint, dedge.p1, q, s, {color: 0x336699, width: Math.sqrt(attr[dedge.p1].river), minLength: 2});
+              noisy_line.drawLineP(graphics, midpoint, q, dedge.p1, s, {color: 0x336699, width: Math.sqrt(attr[dedge.p1].river), minLength: 2});
             }
           }
         }
@@ -348,16 +348,6 @@ package {
           if (attr[edge].d0 == q || attr[edge].d1 == q) return edge;
         }
       return null;
-    }
-
-    
-    // Draw a noisy line from p to q, enclosed by the boundary points
-    // a and b.  Points p-a-q-b form a quadrilateral, and the noisy
-    // line will be inside of it.
-    public function drawNoisyLine(p:Point, q:Point, a:Point, b:Point, style:Object=null):void {
-      // TODO: we actually want two line widths, one for p and one for q
-      noisy_line.drawLineP(graphics, p, a, q, b, style);
-      graphics.lineStyle();
     }
 
     
