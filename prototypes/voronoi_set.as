@@ -98,34 +98,6 @@ package {
       while (queue.length > 0) {
         p = queue.shift();
 
-        // Determine the color of this polygon
-        if (attr[p].ocean) {
-          attr[p].color = 0x555599;
-        } else if (attr[p].water) {
-          attr[p].color = 0x336699;
-          if (attr[p].elevation < 0.1) attr[p].color = 0x226677; /* swamp?? not sure */
-          if (attr[p].elevation > 7) attr[p].color = 0x99ffff; /* ice */
-          if (attr[p].elevation > 9) attr[p].color = 0x333333; /* scorched? */
-        } else if (attr[p].coast) {
-          attr[p].color = 0xb0b099;  // beach
-        } else if (attr[p].elevation > 9) {
-          attr[p].color = 0xcc3333;  // lava
-        } else if (attr[p].elevation > 8.5) {
-          attr[p].color = 0x666666;  // scorched
-        } else if (attr[p].elevation > 7) {
-          attr[p].color = 0xffffff;  // ice
-        } else if (attr[p].elevation > 6) {
-          attr[p].color = 0xaacc88;  // dry grasslands
-        } else if (attr[p].elevation > 4.5) {
-          attr[p].color = 0x99aa55;  // grasslands
-        } else if (attr[p].elevation > 2.5) {
-          attr[p].color = 0x77aa55;  // grasslands
-        }  else if (attr[p].elevation > 0) {
-          attr[p].color = 0x559955;  // wet grasslands
-        } else {
-          attr[p].color = 0x558866;  // swampy
-        }
-        
         for each (q in attr[p].neighbors) {
             var newElevation:Number = 0.01 + attr[p].elevation;
             var changed:Boolean = false;
@@ -157,7 +129,37 @@ package {
           }
       }
 
-      
+
+      // Color the polygons based on elevation, water, ocean
+      for each (p in points) {
+          if (attr[p].ocean) {
+            attr[p].color = 0x555599;
+          } else if (attr[p].water) {
+            attr[p].color = 0x336699;
+            if (attr[p].elevation < 0.1) attr[p].color = 0x226677; /* swamp?? not sure */
+            if (attr[p].elevation > 7) attr[p].color = 0x99ffff; /* ice */
+            if (attr[p].elevation > 9) attr[p].color = 0x333333; /* scorched? */
+          } else if (attr[p].coast) {
+            attr[p].color = 0xb0b099;  // beach
+          } else if (attr[p].elevation > 9) {
+            attr[p].color = 0xcc3333;  // lava
+          } else if (attr[p].elevation > 8.5) {
+            attr[p].color = 0x666666;  // scorched
+          } else if (attr[p].elevation > 7) {
+            attr[p].color = 0xffffff;  // ice
+          } else if (attr[p].elevation > 6) {
+            attr[p].color = 0xaacc88;  // dry grasslands
+          } else if (attr[p].elevation > 4.5) {
+            attr[p].color = 0x99aa55;  // grasslands
+          } else if (attr[p].elevation > 2.5) {
+            attr[p].color = 0x77aa55;  // grasslands
+          }  else if (attr[p].elevation > 0) {
+            attr[p].color = 0x559955;  // wet grasslands
+          } else {
+            attr[p].color = 0x558866;  // swampy
+          }
+        }
+                              
       // Determine downslope paths
       for each (p in points) {
           r = p;
