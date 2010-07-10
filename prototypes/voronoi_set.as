@@ -118,10 +118,6 @@ package {
             var changed:Boolean = false;
             if (!attr[q].water && !attr[p].water) {
               newElevation += 0.5 + Math.random();
-              if (p.x > q.x && newElevation > 1) {
-                // biased so that mountains are more common on one side
-                newElevation += 4 + 2 * Math.random();
-              }
             }
             if (attr[q].elevation == null || newElevation < attr[q].elevation) {
               attr[q].elevation = newElevation;
@@ -200,9 +196,9 @@ package {
 
       
       // Create rivers. Pick a random point, then move downslope
-      for (i = 0; i < SIZE/3; i++) {
+      for (i = 0; i < SIZE/2; i++) {
         p = points[int(Math.random() * NUM_POINTS)];
-        if (attr[p].water || attr[p].elevation < 5 || attr[p].elevation > 9) continue;
+        if (attr[p].water || attr[p].elevation < 3 || attr[p].elevation > 9) continue;
         while (!attr[p].ocean) {
           if (attr[p].river == null) attr[p].river = 0;
           attr[p].river = attr[p].river + 1;
