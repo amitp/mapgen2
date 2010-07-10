@@ -494,5 +494,104 @@ package {
       }
       return _textures[color];
     }
+
+    //////////////////////////////////////////////////////////////////////
+    // The following code is used to export the maps to disk
+
+    // We export altitude, moisture, and an override byte. We "paint"
+    // these three by using RGB values and the standard paint
+    // routines.  The exportColors have R, G, B, set to be the
+    // altitude, moisture, and override code.
+    static public var exportColors:Object = {
+      /* override codes are 0:none, 0x10:river water, 0x20:lava, 0x30:snow,
+         0x40:ice, 0x50:ocean, 0x60:lake, 0x70:lake shore, 0x80:ocean shore */
+      OCEAN: 0x00ff50,
+      COAST: 0x00ff80,
+      LAKE: 0x55ff60,
+      LAKESHORE: 0x55ff70,
+      RIVER: 0x55ff10,
+      MARSH: 0x33ff10,
+      ICE: 0xeeff40,
+      SCORCHED: 0xdd0000,
+      BEACH: 0x034400,
+      LAVA: 0xee0020,
+      SNOW: 0xeeff30,
+      SAVANNAH: 0xcc2200,
+      GRASSLANDS: 0x994400,
+      DRY_FOREST: 0x666600,
+      RAIN_FOREST: 0x448800,
+      SWAMP: 0x33ff00
+    };
+
+    // These are empty when we make a map, and filled in on export
+    public var altitude:ByteArray = new ByteArray();
+    public var moisture:ByteArray = new ByteArray();
+    public var override:ByteArray = new ByteArray();
+    // This function fills in the above three arrays
+    public var fillExportBitmaps:Function;
+    
+    public function setupExport(points:Vector.<Point>, voronoi:Voronoi, attr:Dictionary):void {
+      var export:BitmapData = new BitmapData(2048, 2048);
+      var exportGraphics:Shape = new Shape();
+      altitude.clear();
+      moisture.clear();
+      override.clear();
+      
+      fillExportBitmaps = function():void {
+        if (altitude.length == 0) {
+          renderPolygons(exportGraphics.graphics, points, exportColors, attr, false);
+          renderRivers(exportGraphics.graphics, points, exportColors, voronoi, attr);
+          var m:Matrix = new Matrix();
+          m.scale(2048.0 / SIZE, 2048.0 / SIZE);
+          stage.quality = 'low';
+          export.draw(exportGraphics, m);
+          stage.quality = 'best';
+          for (var x:int = 0; x < 2048; x++) {
+            for (var y:int = 0; y < 2048; y++) {
+              var color:uint = export.getPixel(x, y);
+              altitude.writeByte((color >> 16) & 0xff);
+              moisture.writeByte((color >> 8) & 0xff);
+              override.writeByte(color & 0xff);
+            }
+          }
+        }
+      }
+    }
+
+    public function addExportButtons():void {
+      function makeButton(label:String, x:int, y:int, callback:Function):TextField {
+        var button:TextField = new TextField();
+        button.text = label;
+        button.selectable = false;
+        button.background = true;
+        button.backgroundColor = 0xffffcc;
+        button.x = x;
+        button.y = y;
+        button.height = 20;
+        button.addEventListener(MouseEvent.CLICK, callback);
+        return button;
+      }
+
+      addChild(makeButton("altitude", 650, 50,
+                          function (e:Event):void {
+                            fillExportBitmaps();
+                            new FileReference().save(altitude);
+                            e.stopPropagation();
+                          }));
+      addChild(makeButton("moisture", 650, 80,
+                          function (e:Event):void {
+                            fillExportBitmaps();
+                            new FileReference().save(moisture);
+                            e.stopPropagation();
+                          }));
+      addChild(makeButton("overrides", 650, 110,
+                          function (e:Event):void {
+                            fillExportBitmaps();
+                            new FileReference().save(override);
+                            e.stopPropagation();
+                          }));
+    }
+    
   }
+  
 }
