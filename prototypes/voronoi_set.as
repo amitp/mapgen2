@@ -19,10 +19,13 @@ package {
 
     static public var colors:Object = {
       OCEAN: 0x555599,
-      WATER: 0x336699,
-      SWAMP: 0x226677,
+      COAST: 0x333377,
+      LAKESHORE: 0x225588,
+      LAKE: 0x336699,
+      RIVER: 0x336699,
+      MARSH: 0x226677,
       ICE: 0x99ffff,
-      SCORCHED: 0x333333,
+      SCORCHED: 0x444433,
       BEACH: 0xb0b099,
       LAVA: 0xcc3333,
       SNOW: 0xffffff,
@@ -159,13 +162,13 @@ package {
           if (attr[p].ocean) {
             attr[p].biome = 'OCEAN';
           } else if (attr[p].water) {
-            attr[p].biome = 'WATER';
-            if (attr[p].elevation < 0.1) attr[p].biome = 'SWAMP';
+            attr[p].biome = 'LAKE';
+            if (attr[p].elevation < 0.1) attr[p].biome = 'MARSH';
             if (attr[p].elevation > 7) attr[p].biome = 'ICE';
             if (attr[p].elevation > 9) attr[p].biome = 'SCORCHED';
           } else if (attr[p].coast) {
             attr[p].biome = 'BEACH';
-          } else if (attr[p].elevation > 9) {
+          } else if (attr[p].elevation > 9.9) {
             attr[p].biome = 'LAVA';
           } else if (attr[p].elevation > 8.5) {
             attr[p].biome = 'SCORCHED';
@@ -256,15 +259,8 @@ package {
       
       var p:Point, q:Point, r:Point, s:Point;
 
-      // Draw rivers. TODO: refactor to share code with buildNoisyEdges()
-      var edges:Vector.<Edge> = voronoi.edges();
-      for (i = 0; i < edges.length; i++) {
-        var dedge:LineSegment = edges[i].delaunayLine();
-        var vedge:LineSegment = edges[i].voronoiEdge();
-        if (vedge.p0 && vedge.p1 &&
-            (!attr[dedge.p0].ocean || !attr[dedge.p1].ocean)) {
-          var midpoint:Point = Point.interpolate(vedge.p0, vedge.p1, 0.5);
-          var alpha:Number = 0.03;
+      renderPolygons(graphics, points, displayColors, attr, true);
+      renderRivers(graphics, points, displayColors, voronoi, attr);
 
           var f:Number = 0.6;  // low: jagged vedge; high: jagged dedge
           p = Point.interpolate(vedge.p0, dedge.p0, f);
@@ -379,6 +375,99 @@ package {
     }
 
 
+    // Render the polygons
+    public function renderPolygons(graphics:Graphics, points:Vector.<Point>, colors:Object, attr:Dictionary, texturedFills:Boolean):void {
+      var p:Point, q:Point;
+
+      // My Voronoi polygon rendering doesn't handle the boundary
+      // polygons, so I just fill everything with ocean first.
+      graphics.beginFill(colors.OCEAN);
+      graphics.drawRect(0, 0, SIZE, SIZE);
+      graphics.endFill();
+      
+      for each (p in points) {
+          function drawPathForwards(path:Vector.<Point>):void {
+            for (var i:int = 0; i < path.length; i++) {
+              graphics.lineTo(path[i].x, path[i].y);
+            }
+          }
+          function drawPathBackwards(path:Vector.<Point>):void {
+            for (var i:int = path.length-1; i >= 0; i--) {
+              graphics.lineTo(path[i].x, path[i].y);
+            }
+          }
+          for each (q in attr[p].neighbors) {
+              if (texturedFills) {
+                graphics.beginBitmapFill(getBitmapTexture(colors[attr[p].biome]));
+              } else {
+                graphics.beginFill(colors[attr[p].biome]);
+              }
+              graphics.moveTo(p.x, p.y);
+              var edge:Edge = lookupEdge(p, q, attr);
+              if (attr[edge].path0 == null || attr[edge].path1 == null) {
+                continue;
+                Debug.trace("NULL PATH", attr[edge].d0 == p, attr[edge].d0 == q);
+              }
+              graphics.lineTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
+              if (attr[p].ocean != attr[q].ocean) {
+                // One side is ocean and the other side is land -- coastline
+                graphics.lineStyle(2, colors.COAST);
+              } else if (attr[p].water != attr[q].water) {
+                // Lake boundary
+                graphics.lineStyle(1, colors.LAKESHORE);
+              }
+              
+              drawPathForwards(attr[edge].path0);
+              drawPathBackwards(attr[edge].path1);
+              graphics.lineStyle();
+              graphics.lineTo(p.x, p.y);
+              graphics.endFill();
+            }
+        }
+    }
+    
+
+    // Render rivers. TODO: refactor to share code with buildNoisyEdges()
+    public function renderRivers(graphics:Graphics, points:Vector.<Point>, colors:Object, voronoi:Voronoi, attr:Dictionary):void {
+      var edges:Vector.<Edge> = voronoi.edges();
+      for (var i:int = 0; i < edges.length; i++) {
+        var dedge:LineSegment = edges[i].delaunayLine();
+        var vedge:LineSegment = edges[i].voronoiEdge();
+        if (vedge.p0 && vedge.p1 &&
+            (!attr[dedge.p0].ocean || !attr[dedge.p1].ocean)) {
+          var midpoint:Point = Point.interpolate(vedge.p0, vedge.p1, 0.5);
+          var alpha:Number = 0.03;
+
+          var f:Number = 0.6;  // low: jagged vedge; high: jagged dedge
+          var p:Point = Point.interpolate(vedge.p0, dedge.p0, f);
+          var q:Point = Point.interpolate(vedge.p0, dedge.p1, f);
+          var r:Point = Point.interpolate(vedge.p1, dedge.p0, f);
+          var s:Point = Point.interpolate(vedge.p1, dedge.p1, f);
+
+          // Water river
+          if ((attr[dedge.p0].downslope == dedge.p1 || attr[dedge.p1].downslope == dedge.p0)
+              && ((attr[dedge.p0].water || attr[dedge.p0].river)
+                  && (attr[dedge.p1].water || attr[dedge.p1].river))) {
+            if (attr[dedge.p0].river && !attr[dedge.p0].water) {
+              noisy_line.drawLineP(graphics, dedge.p0, p, midpoint, r, {color: colors.RIVER, width: Math.sqrt(attr[dedge.p0].river), minLength: 2});
+            }
+            if (attr[dedge.p1].river && !attr[dedge.p1].water) {
+              noisy_line.drawLineP(graphics, midpoint, q, dedge.p1, s, {color: colors.RIVER, width: Math.sqrt(attr[dedge.p1].river), minLength: 2});
+            }
+          }
+
+          // Lava flow
+          if (!attr[dedge.p0].water && !attr[dedge.p1].water
+              && !attr[dedge.p0].river && !attr[dedge.p1].river
+              && (attr[dedge.p0].elevation > 9 || attr[dedge.p1].elevation > 9)) {
+            noisy_line.drawLineP(graphics, vedge.p0, p, midpoint, r, {color: colors.LAVA, width: 0.5*(attr[dedge.p0].elevation - 7), minLength: 1});
+            noisy_line.drawLineP(graphics, midpoint, q, vedge.p1, s, {color: colors.LAVA, width: 0.5*(attr[dedge.p1].elevation - 7), minLength: 1});
+          }
+          
+        }
+      }
+    }
+  
     // Build a noisy bitmap tile for a given color
     private var _textures:Array = [];
     public function getBitmapTexture(color:uint):BitmapData {
