@@ -6,7 +6,11 @@ package {
   import flash.geom.*;
   import flash.display.*;
   import flash.events.*;
+  import flash.text.TextField;
   import flash.utils.Dictionary;
+  import flash.utils.ByteArray;
+  import flash.utils.getTimer;
+  import flash.net.FileReference;
   import com.nodename.geom.Circle;
   import com.nodename.geom.LineSegment;
   import com.nodename.Delaunay.Edge;
@@ -17,7 +21,7 @@ package {
     static public var SIZE:int = 600;
     static public var ISLAND_FACTOR:Number = 1.1;  // 1.0 means no small islands; 2.0 leads to a lot
 
-    static public var colors:Object = {
+    static public var displayColors:Object = {
       OCEAN: 0x555599,
       COAST: 0x333377,
       LAKESHORE: 0x225588,
@@ -43,6 +47,8 @@ package {
       addChild(new Debug(this));
 
       stage.addEventListener(MouseEvent.CLICK, function (e:MouseEvent):void { go(); } );
+
+      addExportButtons();
       go();
     }
 
@@ -52,7 +58,7 @@ package {
       graphics.drawRect(-1000, -1000, 2000, 2000);
       graphics.endFill();
 
-      var i:int, j:int;
+      var i:int, j:int, t:Number;
 
       // Random parameters governing the overall shape of the island
       var island:Object = {
@@ -258,23 +264,9 @@ package {
       renderPolygons(graphics, points, displayColors, attr, true);
       renderRivers(graphics, points, displayColors, voronoi, attr);
 
-          var f:Number = 0.6;  // low: jagged vedge; high: jagged dedge
-          p = Point.interpolate(vedge.p0, dedge.p0, f);
-          q = Point.interpolate(vedge.p0, dedge.p1, f);
-          r = Point.interpolate(vedge.p1, dedge.p0, f);
-          s = Point.interpolate(vedge.p1, dedge.p1, f);
-          if ((attr[dedge.p0].downslope == dedge.p1 || attr[dedge.p1].downslope == dedge.p0)
-              && ((attr[dedge.p0].water || attr[dedge.p0].river)
-                  && (attr[dedge.p1].water || attr[dedge.p1].river))) {
-            if (attr[dedge.p0].river && !attr[dedge.p0].water) {
-              noisy_line.drawLineP(graphics, dedge.p0, p, midpoint, r, {color: 0x336699, width: Math.sqrt(attr[dedge.p0].river), minLength: 2});
-            }
-            if (attr[dedge.p1].river && !attr[dedge.p1].water) {
-              noisy_line.drawLineP(graphics, midpoint, q, dedge.p1, s, {color: 0x336699, width: Math.sqrt(attr[dedge.p1].river), minLength: 2});
-            }
-          }
-        }
-      }
+      t = getTimer();
+      setupExport(points, voronoi, attr);
+      Debug.trace("TIME for export setup:", getTimer()-t);
     }
 
 
