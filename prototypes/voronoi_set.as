@@ -134,7 +134,7 @@ package {
             var newElevation:Number = 0.01 + attr[p].elevation;
             var changed:Boolean = false;
             if (!attr[q].water && !attr[p].water) {
-              newElevation += 0.5 + Math.random();
+              newElevation += 1 + Math.random();
             }
             if (attr[q].elevation == null || newElevation < attr[q].elevation) {
               attr[q].elevation = newElevation;
@@ -187,15 +187,15 @@ package {
             attr[p].biome = 'BEACH';
           } else if (attr[p].elevation > 9.9) {
             attr[p].biome = 'LAVA';
-          } else if (attr[p].elevation > 8.5) {
+          } else if (attr[p].elevation > 9) {
             attr[p].biome = 'SCORCHED';
-          } else if (attr[p].elevation > 7) {
+          } else if (attr[p].elevation > 8) {
             attr[p].biome = 'SNOW';
-          } else if (attr[p].elevation > 6) {
+          } else if (attr[p].elevation > 7) {
             attr[p].biome = 'SAVANNAH'; 
-          } else if (attr[p].elevation > 4.5) {
+          } else if (attr[p].elevation > 6) {
             attr[p].biome = 'GRASSLANDS';
-          } else if (attr[p].elevation > 2.5) {
+          } else if (attr[p].elevation > 4) {
             attr[p].biome = 'DRY_FOREST';
           }  else if (attr[p].elevation > 0) {
             attr[p].biome = 'RAIN_FOREST';
