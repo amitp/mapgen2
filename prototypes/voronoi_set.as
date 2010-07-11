@@ -355,7 +355,7 @@ package {
 
 
     // Render the polygons
-    public function renderPolygons(graphics:Graphics, points:Vector.<Point>, colors:Object, attr:Dictionary, texturedFills:Boolean):void {
+    public function renderPolygons(graphics:Graphics, points:Vector.<Point>, colors:Object, attr:Dictionary, texturedFills:Boolean, altitudeFunction:Function, moistureFunction:Function):void {
       var p:Point, q:Point;
 
       // My Voronoi polygon rendering doesn't handle the boundary
@@ -376,10 +376,14 @@ package {
             }
           }
           for each (q in attr[p].neighbors) {
+              var color:int = colors[attr[p].biome];
+              if (altitudeFunction != null) {
+                color = (altitudeFunction(p, q, attr) << 16) | (color & 0xffff);
+              }
               if (texturedFills) {
-                graphics.beginBitmapFill(getBitmapTexture(colors[attr[p].biome]));
+                graphics.beginBitmapFill(getBitmapTexture(color));
               } else {
-                graphics.beginFill(colors[attr[p].biome]);
+                graphics.beginFill(color);
               }
               graphics.moveTo(p.x, p.y);
               var edge:Edge = lookupEdge(p, q, attr);
@@ -522,7 +526,7 @@ package {
       
       fillExportBitmaps = function():void {
         if (altitude.length == 0) {
-          renderPolygons(exportGraphics.graphics, points, exportColors, attr, false);
+          renderPolygons(exportGraphics.graphics, points, exportColors, attr, false, exportAltitudeFunction, null);
           renderRivers(exportGraphics.graphics, points, exportColors, voronoi, attr);
           var m:Matrix = new Matrix();
           m.scale(2048.0 / SIZE, 2048.0 / SIZE);
@@ -541,6 +545,18 @@ package {
       }
     }
 
+    public function exportAltitudeFunction(p:Point, q:Point, attr:Dictionary):int {
+      var elevation:Number = (0.667 * attr[p].elevation + 0.333 * attr[q].elevation) / 10;
+      var c:int = 255 * elevation * elevation;
+      if (attr[p].biome == 'BEACH') c = 3;
+      else if (attr[p].ocean) c = 0;
+      else c += 6;
+      if (c < 0) c = 0;
+      if (c > 255) c = 255;
+      return c;
+    }
+
+    
     public function addExportButtons():void {
       function makeButton(label:String, x:int, y:int, callback:Function):TextField {
         var button:TextField = new TextField();
