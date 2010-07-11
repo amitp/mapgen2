@@ -72,6 +72,7 @@ package {
       // in the water. Some water points are inland lakes; others are
       // ocean. We'll determine ocean later by looking at what's
       // connected to ocean.
+      t = getTimer();
       var points:Vector.<Point> = new Vector.<Point>();
       var attr:Dictionary = new Dictionary();
       for (i = 0; i < NUM_POINTS; i++) {
@@ -84,16 +85,23 @@ package {
           water: !inside(island, p)
         };
       }
+      Debug.trace("TIME for random points:", getTimer()-t);
 
+      t = getTimer();
       var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
+      Debug.trace("TIME for voronoi:", getTimer()-t);
 
       // Create a graph structure from the voronoi edge list
+      t = getTimer();
       for each (p in points) {
           // Workaround for Voronoi lib bug: we need to call region()
           // before Edges or neighboringSites are available
           voronoi.region(p);
         }
+      Debug.trace("TIME for region workaround:", getTimer()-t);
+      t = getTimer();
       buildGraph(voronoi, attr);
+      Debug.trace("TIME for buildGraph:", getTimer()-t);
       
       // Determine the elevations and oceans. By construction, we have
       // no local minima. This is important for the downslope vectors
@@ -105,6 +113,7 @@ package {
       // as much as other terrain does. TODO: there are points that
       // aren't being reached from this loop. Why?? We probably need
       // to force the edges of the map to be ocean, altitude 0.
+      t = getTimer();
       var queue:Array = [];
       for each (p in points) {
           // Start with a seed ocean in the upper left, and let it
@@ -116,6 +125,8 @@ package {
             queue.push(p);
           }
         }
+      Debug.trace("TIME for initial queue:", getTimer()-t);
+      t = getTimer();
       while (queue.length > 0) {
         p = queue.shift();
 
@@ -145,9 +156,11 @@ package {
             }
           }
       }
+      Debug.trace("TIME for elevation queue processing:", getTimer()-t);
 
 
       // Rescale elevations so that the highest is 10
+      t = getTimer();
       var maxElevation:Number = 0.0;
       for each (p in points) {
           if (attr[p].elevation > maxElevation) {
@@ -157,9 +170,11 @@ package {
       for each (p in points) {
           attr[p].elevation = attr[p].elevation * 10 / maxElevation;
         }
+      Debug.trace("TIME for elevation rescaling:", getTimer()-t);
 
 
       // Choose polygon biomes based on elevation, water, ocean
+      t = getTimer();
       for each (p in points) {
           if (attr[p].ocean) {
             attr[p].biome = 'OCEAN';
@@ -188,8 +203,10 @@ package {
             attr[p].biome = 'SWAMP';
           }
         }
+      Debug.trace("TIME for terrain assignment:", getTimer()-t);
                               
       // Determine downslope paths
+      t = getTimer();
       for each (p in points) {
           r = p;
           for each (q in attr[p].neighbors) {
@@ -199,9 +216,11 @@ package {
             }
           attr[p].downslope = r;
         }
+      Debug.trace("TIME for downslope paths:", getTimer()-t);
 
       
       // Create rivers. Pick a random point, then move downslope
+      t = getTimer();
       for (i = 0; i < SIZE/2; i++) {
         p = points[int(Math.random() * NUM_POINTS)];
         if (attr[p].water || attr[p].elevation < 3 || attr[p].elevation > 9) continue;
@@ -215,54 +234,22 @@ package {
           p = attr[p].downslope;
         }
       }
+      Debug.trace("TIME for river paths:", getTimer()-t);
 
       // For all edges between polygons, build a noisy line path that
       // we can reuse while drawing both polygons connected to that edge
+      t = getTimer();
       buildNoisyEdges(points, attr);
+      Debug.trace("TIME for noisy edge construction:", getTimer()-t);
 
-      // Draw the polygons.
-      for each (p in points) {
-          function drawPathForwards(path:Vector.<Point>):void {
-            for (var i:int = 0; i < path.length; i++) {
-              graphics.lineTo(path[i].x, path[i].y);
-            }
-          }
-          function drawPathBackwards(path:Vector.<Point>):void {
-            for (var i:int = path.length-1; i >= 0; i--) {
-              graphics.lineTo(path[i].x, path[i].y);
-            }
-          }
-          for each (q in attr[p].neighbors) {
-              graphics.beginBitmapFill(getBitmapTexture(colors[attr[p].biome]));
-              graphics.moveTo(p.x, p.y);
-              var edge:Edge = lookupEdge(p, q, attr);
-              if (attr[edge].path0 == null || attr[edge].path1 == null) {
-                continue;
-                Debug.trace("NULL PATH", attr[edge].d0 == p, attr[edge].d0 == q);
-              }
-              graphics.lineTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
-              if (attr[p].ocean != attr[q].ocean) {
-                // One side is ocean and the other side is land -- coastline
-                graphics.lineStyle(1, 0x000000);
-              } else if (attr[p].water != attr[q].water) {
-                // Lake boundary
-                graphics.lineStyle(1, 0x003366, 0.5);
-              } else if (attr[p].biome != attr[q].biome) {
-                // Terrain boundary -- emphasize a bit
-                graphics.lineStyle(1, 0x000000, 0.05);
-              }
-              drawPathForwards(attr[edge].path0);
-              drawPathBackwards(attr[edge].path1);
-                graphics.lineStyle();
-              graphics.lineTo(p.x, p.y);
-              graphics.endFill();
-            }
-        }
-      
       var p:Point, q:Point, r:Point, s:Point;
 
-      renderPolygons(graphics, points, displayColors, attr, true);
+      t = getTimer();
+      renderPolygons(graphics, points, displayColors, attr, true, null, null);
+      Debug.trace("TIME for polygon rendering:", getTimer()-t);
+      t = getTimer();
       renderRivers(graphics, points, displayColors, voronoi, attr);
+      Debug.trace("TIME for edge rendering:", getTimer()-t);
 
       t = getTimer();
       setupExport(points, voronoi, attr);
