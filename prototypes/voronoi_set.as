@@ -316,8 +316,12 @@ package {
                 var r:Point = Point.interpolate(attr[edge].v1, attr[edge].d0, f);
                 var s:Point = Point.interpolate(attr[edge].v1, attr[edge].d1, f);
 
-                attr[edge].path0 = noisy_line.buildLineSegments(attr[edge].v0, p, midpoint, q, 1);
-                attr[edge].path1 = noisy_line.buildLineSegments(attr[edge].v1, s, midpoint, r, 1);
+                var minLength:int = 4;
+                if (attr[attr[edge].d0].water != attr[attr[edge].d1].water) minLength = 2;
+                if (attr[attr[edge].d0].ocean && attr[attr[edge].d1].ocean) minLength = 100;
+                
+                attr[edge].path0 = noisy_line.buildLineSegments(attr[edge].v0, p, midpoint, q, minLength);
+                attr[edge].path1 = noisy_line.buildLineSegments(attr[edge].v1, s, midpoint, r, minLength);
                 _count++;
               }
             }
