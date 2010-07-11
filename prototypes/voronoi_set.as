@@ -39,7 +39,7 @@ package {
       RAIN_FOREST: 0x559955,
       SWAMP: 0x558866
     };
-    
+
     public function voronoi_set() {
       stage.scaleMode = 'noScale';
       stage.align = 'TL';
@@ -52,6 +52,14 @@ package {
       go();
     }
 
+    // Random parameters governing the overall shape of the island
+    public var island:Object = {
+      bumps: int(1 + Math.random()*6),
+      startAngle: Math.random() * 2*Math.PI,
+      dipAngle: Math.random() * 2*Math.PI,
+      dipWidth: 0.2 + Math.random()*0.5
+    };
+
     public function go():void {
       graphics.clear();
       graphics.beginFill(0x555599);
@@ -59,14 +67,6 @@ package {
       graphics.endFill();
 
       var i:int, j:int, t:Number;
-
-      // Random parameters governing the overall shape of the island
-      var island:Object = {
-        bumps: int(1 + Math.random()*6),
-        startAngle: Math.random() * 2*Math.PI,
-        dipAngle: Math.random() * 2*Math.PI,
-        dipWidth: 0.2 + Math.random()*0.5
-      };
 
       // Generate random points and assign them to be on the island or
       // in the water. Some water points are inland lakes; others are
