@@ -526,14 +526,14 @@ package {
     public var fillExportBitmaps:Function;
     
     public function setupExport(points:Vector.<Point>, voronoi:Voronoi, attr:Dictionary):void {
-      var export:BitmapData = new BitmapData(2048, 2048);
-      var exportGraphics:Shape = new Shape();
       altitude.clear();
       moisture.clear();
       override.clear();
       
       fillExportBitmaps = function():void {
         if (altitude.length == 0) {
+          var export:BitmapData = new BitmapData(2048, 2048);
+          var exportGraphics:Shape = new Shape();
           renderPolygons(exportGraphics.graphics, points, exportColors, attr, false, exportAltitudeFunction, null);
           renderRivers(exportGraphics.graphics, points, exportColors, voronoi, attr);
           var m:Matrix = new Matrix();
