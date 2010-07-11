@@ -175,34 +175,7 @@ package {
 
       // Choose polygon biomes based on elevation, water, ocean
       t = getTimer();
-      for each (p in points) {
-          if (attr[p].ocean) {
-            attr[p].biome = 'OCEAN';
-          } else if (attr[p].water) {
-            attr[p].biome = 'LAKE';
-            if (attr[p].elevation < 0.1) attr[p].biome = 'MARSH';
-            if (attr[p].elevation > 7) attr[p].biome = 'ICE';
-            if (attr[p].elevation > 9) attr[p].biome = 'SCORCHED';
-          } else if (attr[p].coast) {
-            attr[p].biome = 'BEACH';
-          } else if (attr[p].elevation > 9.9) {
-            attr[p].biome = 'LAVA';
-          } else if (attr[p].elevation > 9) {
-            attr[p].biome = 'SCORCHED';
-          } else if (attr[p].elevation > 8) {
-            attr[p].biome = 'SNOW';
-          } else if (attr[p].elevation > 7) {
-            attr[p].biome = 'SAVANNAH'; 
-          } else if (attr[p].elevation > 6) {
-            attr[p].biome = 'GRASSLANDS';
-          } else if (attr[p].elevation > 4) {
-            attr[p].biome = 'DRY_FOREST';
-          }  else if (attr[p].elevation > 0) {
-            attr[p].biome = 'RAIN_FOREST';
-          } else {
-            attr[p].biome = 'SWAMP';
-          }
-        }
+      assignTerrains(points, attr);
       Debug.trace("TIME for terrain assignment:", getTimer()-t);
                               
       // Determine downslope paths
@@ -298,6 +271,38 @@ package {
     }
 
 
+    // Assign a terrain type to each polygon
+    public function assignTerrains(points:Vector.<Point>, attr:Dictionary):void {
+      for each (var p:Point in points) {
+          if (attr[p].ocean) {
+            attr[p].biome = 'OCEAN';
+          } else if (attr[p].water) {
+            attr[p].biome = 'LAKE';
+            if (attr[p].elevation < 0.1) attr[p].biome = 'MARSH';
+            if (attr[p].elevation > 7) attr[p].biome = 'ICE';
+            if (attr[p].elevation > 9) attr[p].biome = 'SCORCHED';
+          } else if (attr[p].coast) {
+            attr[p].biome = 'BEACH';
+          } else if (attr[p].elevation > 9.9) {
+            attr[p].biome = 'LAVA';
+          } else if (attr[p].elevation > 9) {
+            attr[p].biome = 'SCORCHED';
+          } else if (attr[p].elevation > 8) {
+            attr[p].biome = 'SNOW';
+          } else if (attr[p].elevation > 7) {
+            attr[p].biome = 'SAVANNAH'; 
+          } else if (attr[p].elevation > 6) {
+            attr[p].biome = 'GRASSLANDS';
+          } else if (attr[p].elevation > 4) {
+            attr[p].biome = 'DRY_FOREST';
+          }  else if (attr[p].elevation > 0) {
+            attr[p].biome = 'RAIN_FOREST';
+          } else {
+            attr[p].biome = 'SWAMP';
+          }
+        }
+    }
+    
     // Build noisy line paths for each of the Voronoi edges. There are
     // two noisy line paths for each edge, each covering half the
     // distance: attr[edge].path0 will be from v0 to the midpoint and
