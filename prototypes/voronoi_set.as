@@ -46,19 +46,22 @@ package {
 
       addChild(new Debug(this));
 
-      stage.addEventListener(MouseEvent.CLICK, function (e:MouseEvent):void { go(); } );
-
       addExportButtons();
+      addGenerateButtons();
+      newIsland();
       go();
     }
 
     // Random parameters governing the overall shape of the island
-    public var island:Object = {
-      bumps: int(1 + Math.random()*6),
-      startAngle: Math.random() * 2*Math.PI,
-      dipAngle: Math.random() * 2*Math.PI,
-      dipWidth: 0.2 + Math.random()*0.5
-    };
+    public var island:Object;
+    public function newIsland():void {
+      island = {
+        bumps: int(1 + Math.random()*6),
+        startAngle: Math.random() * 2*Math.PI,
+        dipAngle: Math.random() * 2*Math.PI,
+        dipWidth: 0.2 + Math.random()*0.5
+      };
+    }
 
     public function go():void {
       graphics.clear();
@@ -561,34 +564,47 @@ package {
       return c;
     }
 
-    
-    public function addExportButtons():void {
-      function makeButton(label:String, x:int, y:int, callback:Function):TextField {
-        var button:TextField = new TextField();
-        button.text = label;
-        button.selectable = false;
-        button.background = true;
-        button.backgroundColor = 0xffffcc;
-        button.x = x;
-        button.y = y;
-        button.height = 20;
-        button.addEventListener(MouseEvent.CLICK, callback);
-        return button;
-      }
 
-      addChild(makeButton("altitude", 650, 50,
+    public function makeButton(label:String, x:int, y:int, callback:Function):TextField {
+      var button:TextField = new TextField();
+      button.text = label;
+      button.selectable = false;
+      button.background = true;
+      button.backgroundColor = 0xffffcc;
+      button.x = x;
+      button.y = y;
+      button.height = 20;
+      button.addEventListener(MouseEvent.CLICK, callback);
+      return button;
+    }
+
+    public function addGenerateButtons():void {
+      addChild(makeButton("new shape", 650, 50,
+                          function (e:Event):void {
+                            newIsland();
+                            go();
+                          }));
+      addChild(makeButton("same shape", 650, 80,
+                          function (e:Event):void {
+                            go();
+                          }));
+    }
+
+               
+    public function addExportButtons():void {
+      addChild(makeButton("export altitude", 650, 150,
                           function (e:Event):void {
                             fillExportBitmaps();
                             new FileReference().save(altitude);
                             e.stopPropagation();
                           }));
-      addChild(makeButton("moisture", 650, 80,
+      addChild(makeButton("export moisture", 650, 180,
                           function (e:Event):void {
                             fillExportBitmaps();
                             new FileReference().save(moisture);
                             e.stopPropagation();
                           }));
-      addChild(makeButton("overrides", 650, 110,
+      addChild(makeButton("export overrides", 650, 210,
                           function (e:Event):void {
                             fillExportBitmaps();
                             new FileReference().save(override);
