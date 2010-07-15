@@ -15,6 +15,7 @@ package {
   import com.nodename.geom.LineSegment;
   import com.nodename.Delaunay.Edge;
   import com.nodename.Delaunay.Voronoi;
+  import de.polygonal.math.PM_PRNG;
   
   public class voronoi_set extends Sprite {
     static public var NUM_POINTS:int = 2000;
@@ -40,6 +41,9 @@ package {
       SWAMP: 0x558866
     };
 
+    public var islandRandom:PM_PRNG = new PM_PRNG(487);
+    public var mapRandom:PM_PRNG = new PM_PRNG(487);
+    
     public function voronoi_set() {
       stage.scaleMode = 'noScale';
       stage.align = 'TL';
@@ -56,10 +60,10 @@ package {
     public var island:Object;
     public function newIsland():void {
       island = {
-        bumps: int(1 + Math.random()*6),
-        startAngle: Math.random() * 2*Math.PI,
-        dipAngle: Math.random() * 2*Math.PI,
-        dipWidth: 0.2 + Math.random()*0.5
+        bumps: islandRandom.nextIntRange(1, 6),
+        startAngle: islandRandom.nextDoubleRange(0, 2*Math.PI),
+        dipAngle: islandRandom.nextDoubleRange(0, 2*Math.PI),
+        dipWidth: islandRandom.nextDoubleRange(0.2, 0.7)
       };
     }
 
@@ -79,8 +83,8 @@ package {
       var points:Vector.<Point> = new Vector.<Point>();
       var attr:Dictionary = new Dictionary();
       for (i = 0; i < NUM_POINTS; i++) {
-        p = new Point(10 + (SIZE-20)*Math.random(), 10 + (SIZE-20)*Math.random());
-
+        p = new Point(mapRandom.nextDoubleRange(10, SIZE-10),
+                      mapRandom.nextDoubleRange(10, SIZE-10));
         points.push(p);
         attr[p] = {
           ocean: false,
@@ -137,7 +141,7 @@ package {
             var newElevation:Number = 0.01 + attr[p].elevation;
             var changed:Boolean = false;
             if (!attr[q].water && !attr[p].water) {
-              newElevation += 1 + Math.random();
+              newElevation += mapRandom.nextDoubleRange(1, 2);
             }
             if (attr[q].elevation == null || newElevation < attr[q].elevation) {
               attr[q].elevation = newElevation;
@@ -198,7 +202,7 @@ package {
       // Create rivers. Pick a random point, then move downslope
       t = getTimer();
       for (i = 0; i < SIZE/2; i++) {
-        p = points[int(Math.random() * NUM_POINTS)];
+        p = points[mapRandom.nextIntRange(0, NUM_POINTS-1)];
         if (attr[p].water || attr[p].elevation < 3 || attr[p].elevation > 9) continue;
         while (!attr[p].ocean) {
           if (attr[p].river == null) attr[p].river = 0;
