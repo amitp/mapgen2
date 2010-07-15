@@ -166,26 +166,10 @@ package {
       Debug.trace("TIME for elevation queue processing:", getTimer()-t);
 
 
-      // Rescale elevations so that the highest is 10
-      t = getTimer();
-      var maxElevation:Number = 0.0;
-      for each (p in points) {
-          if (attr[p].elevation > maxElevation) {
-            maxElevation = attr[p].elevation;
-          }
-        }
-      for each (p in points) {
-          attr[p].elevation = attr[p].elevation * 10 / maxElevation;
-        }
-      Debug.trace("TIME for elevation rescaling:", getTimer()-t);
-
-
-      // Choose polygon biomes based on elevation, water, ocean
-      t = getTimer();
-      assignTerrains(points, attr);
-      Debug.trace("TIME for terrain assignment:", getTimer()-t);
-                              
-      // Determine downslope paths
+      // Determine downslope paths. NOTE: we do this before calling
+      // redistributeElevations because there's no guarantee that the
+      // resulting elevations will have proper downslope paths. TODO:
+      // redistributeElevations should be order-preserving.
       t = getTimer();
       for each (p in points) {
           r = p;
@@ -199,11 +183,35 @@ package {
       Debug.trace("TIME for downslope paths:", getTimer()-t);
 
       
+      // Rescale elevations so that the highest is 1.0, and they're
+      // distributed well. We want lower elevations to be more common
+      // than higher elevations, in proportions approximately matching
+      // concentric rings. That is, the lowest elevation is the
+      // largest ring around the island, and therefore should more
+      // land area than the highest elevation, which is the very
+      // center of a perfectly circular island.
+      t = getTimer();
+
+      var landPoints:Vector.<Point> = new Vector.<Point>();  // only non-ocean
+      for each (p in points) {
+          if (!attr[p].ocean) landPoints.push(p);
+        }
+      redistributeElevations(landPoints, attr);
+      redistributeElevations(landPoints, attr);
+      redistributeElevations(landPoints, attr);
+      Debug.trace("TIME for elevation rescaling:", getTimer()-t);
+      
+
+      // Choose polygon biomes based on elevation, water, ocean
+      t = getTimer();
+      assignTerrains(points, attr);
+      Debug.trace("TIME for terrain assignment:", getTimer()-t);
+                              
       // Create rivers. Pick a random point, then move downslope
       t = getTimer();
       for (i = 0; i < SIZE/2; i++) {
         p = points[mapRandom.nextIntRange(0, NUM_POINTS-1)];
-        if (attr[p].water || attr[p].elevation < 3 || attr[p].elevation > 9) continue;
+        if (attr[p].water || attr[p].elevation < 0.3 || attr[p].elevation > 0.9) continue;
         while (!attr[p].ocean) {
           if (attr[p].river == null) attr[p].river = 0;
           attr[p].river = attr[p].river + 1;
@@ -278,6 +286,79 @@ package {
     }
 
 
+    // Change the overall distribution of elevations so that lower
+    // elevations are more common than higher
+    // elevations. Specifically, we want elevation X to have
+    // frequency (K+maxElevation-X), for some value of K.  To do
+    // this we will compute a histogram of the elevations, then
+    // compute the cumulative sum, then try to make that match the
+    // desired cumulative sum. The desired cumulative sum is the
+    // integral of the desired frequency distribution.
+    public function redistributeElevations(points:Vector.<Point>, attr:Dictionary):void {
+      var maxElevation:int = 10;
+      var M:Number = 1+maxElevation;
+      var p:Point, i:int, x:Number, x0:Number, x1:Number, f:Number, y0:Number, y1:Number;
+      var histogram:Array = [];
+
+      // First, rescale the points so that none is greater than maxElevation
+      x = 1.0;
+      for each (p in points) {
+          if (attr[p].elevation > x) {
+            x = attr[p].elevation;
+          }
+        }
+      // As we rescale, build a histogram of the resulting elevations
+      for each (p in points) {
+          attr[p].elevation *= maxElevation / x;
+          i = int(Math.floor(attr[p].elevation));
+          histogram[i] = (histogram[i] || 0) + 1;
+        }
+
+      // Build a cumulative sum of the histogram. We want this to
+      // match a target distribution, and will adjust all the
+      // elevations to get closer to that.
+      var cumulative:Array = [];
+      cumulative[0] = 0.0;
+      for (i = 0; i < maxElevation; i++) {
+        cumulative[i+1] = (cumulative[i] || 0) + (histogram[i] || 0);
+      }
+
+      // Remap each point's elevation (x) to be closer to the target
+      // distribution. We have an actual cumulative distribution y(x)
+      // and a desired cumulative distribution y'(x).  Given x, we
+      // compute y(x), then set y(x) = y'(x), then solve for x in the
+      // y'(x)=... equation. That gives us the corresponding elevation
+      // in the target distribution.
+      for each (p in points) {
+          x = attr[p].elevation;
+          // We don't have the actual cumulative distribution computed
+          // for all points. x falls into a histogram bucket from x0
+          // to x1, and we can interpolate.
+          x0 = Math.floor(x);
+          if (x0 >= maxElevation) x0 = maxElevation-1.0;
+          x1 = x0 + 1.0;
+          f = x - x0;  /* fractional part */
+          // We'll map x0 and x1 into the actual cumulative sum, y0 and y1
+          y0 = cumulative[int(x0)];
+          y1 = cumulative[int(x1)];
+
+          // We need to map these cumulative y's back to a desired
+          // x. The desired histogram at x is (M-x). The
+          // integral of this is (-0.5*x^2 + M*x). To
+          // solve for x, we need to use the quadratic formula.
+          x0 = M * (1 - Math.sqrt(1 - y0/points.length));
+          x1 = M * (1 - Math.sqrt(1 - y1/points.length));
+          // Since we only have mapped the values at the histogram
+          // boundaries, we need to interpolate to get the value for
+          // this point.
+          x = (1-f)*x0 + f*x1;
+
+          if (x > maxElevation) x = maxElevation;
+          attr[p].elevation = x/maxElevation;
+        }
+    }
+
+    
     // Assign a terrain type to each polygon
     public function assignTerrains(points:Vector.<Point>, attr:Dictionary):void {
       for each (var p:Point in points) {
@@ -286,23 +367,23 @@ package {
           } else if (attr[p].water) {
             attr[p].biome = 'LAKE';
             if (attr[p].elevation < 0.1) attr[p].biome = 'MARSH';
-            if (attr[p].elevation > 7) attr[p].biome = 'ICE';
-            if (attr[p].elevation > 9) attr[p].biome = 'SCORCHED';
+            if (attr[p].elevation > 0.7) attr[p].biome = 'ICE';
+            if (attr[p].elevation > 0.9) attr[p].biome = 'SCORCHED';
           } else if (attr[p].coast) {
             attr[p].biome = 'BEACH';
-          } else if (attr[p].elevation > 9.9) {
+          } else if (attr[p].elevation > 0.99) {
             attr[p].biome = 'LAVA';
-          } else if (attr[p].elevation > 9) {
+          } else if (attr[p].elevation > 0.9) {
             attr[p].biome = 'SCORCHED';
-          } else if (attr[p].elevation > 8) {
+          } else if (attr[p].elevation > 0.8) {
             attr[p].biome = 'SNOW';
-          } else if (attr[p].elevation > 7) {
+          } else if (attr[p].elevation > 0.7) {
             attr[p].biome = 'SAVANNAH'; 
-          } else if (attr[p].elevation > 6) {
+          } else if (attr[p].elevation > 0.6) {
             attr[p].biome = 'GRASSLANDS';
-          } else if (attr[p].elevation > 4) {
+          } else if (attr[p].elevation > 0.4) {
             attr[p].biome = 'DRY_FOREST';
-          }  else if (attr[p].elevation > 0) {
+          }  else if (attr[p].elevation > 0.0) {
             attr[p].biome = 'RAIN_FOREST';
           } else {
             attr[p].biome = 'SWAMP';
@@ -454,9 +535,9 @@ package {
           // Lava flow
           if (!attr[dedge.p0].water && !attr[dedge.p1].water
               && !attr[dedge.p0].river && !attr[dedge.p1].river
-              && (attr[dedge.p0].elevation > 9 || attr[dedge.p1].elevation > 9)) {
-            noisy_line.drawLineP(graphics, vedge.p0, p, midpoint, r, {color: colors.LAVA, width: 0.5*(attr[dedge.p0].elevation - 7), minLength: 1});
-            noisy_line.drawLineP(graphics, midpoint, q, vedge.p1, s, {color: colors.LAVA, width: 0.5*(attr[dedge.p1].elevation - 7), minLength: 1});
+              && (attr[dedge.p0].elevation > 0.9 || attr[dedge.p1].elevation > 0.9)) {
+            noisy_line.drawLineP(graphics, vedge.p0, p, midpoint, r, {color: colors.LAVA, width: 5*(attr[dedge.p0].elevation - 0.7), minLength: 1});
+            noisy_line.drawLineP(graphics, midpoint, q, vedge.p1, s, {color: colors.LAVA, width: 5*(attr[dedge.p1].elevation - 0.7), minLength: 1});
           }
           
         }
@@ -558,7 +639,7 @@ package {
     }
 
     public function exportAltitudeFunction(p:Point, q:Point, attr:Dictionary):int {
-      var elevation:Number = (0.667 * attr[p].elevation + 0.333 * attr[q].elevation) / 10;
+      var elevation:Number = (0.667 * attr[p].elevation + 0.333 * attr[q].elevation);
       var c:int = 255 * elevation * elevation;
       if (attr[p].biome == 'BEACH') c = 3;
       else if (attr[p].ocean) c = 0;
