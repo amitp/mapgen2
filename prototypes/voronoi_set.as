@@ -24,21 +24,23 @@ package {
 
     static public var displayColors:Object = {
       OCEAN: 0x555599,
-      COAST: 0x333377,
+      COAST: 0x444477,
       LAKESHORE: 0x225588,
       LAKE: 0x336699,
       RIVER: 0x336699,
-      MARSH: 0x226677,
+      MARSH: 0x116655,
       ICE: 0x99ffff,
       SCORCHED: 0x444433,
-      BEACH: 0xb0b099,
+      BARE: 0x666666,
+      BEACH: 0xa09077,
       LAVA: 0xcc3333,
-      SNOW: 0xffffff,
-      SAVANNAH: 0xaacc88,
-      GRASSLANDS: 0x99aa55,
-      DRY_FOREST: 0x77aa55,
-      RAIN_FOREST: 0x559955,
-      SWAMP: 0x558866
+      SNOW: 0xffffff, 
+      DESERT: 0xc9d29b,
+      SAVANNAH: 0xaabb88,
+      GRASSLANDS: 0x88aa55,
+      DRY_FOREST: 0x679459,
+      RAIN_FOREST: 0x449955,
+      SWAMP: 0x44524c
     };
 
     public var islandRandom:PM_PRNG = new PM_PRNG(487);
@@ -74,6 +76,7 @@ package {
       graphics.endFill();
 
       var i:int, j:int, t:Number;
+      var p:Point, q:Point, r:Point, s:Point;
 
       // Generate random points and assign them to be on the island or
       // in the water. Some water points are inland lakes; others are
@@ -128,12 +131,10 @@ package {
           if (p.x < 50 && p.y < 50) {
             attr[p].water = true;
             attr[p].ocean = true;
-            attr[p].elevation = 0;
+            attr[p].elevation = 0.0;
             queue.push(p);
           }
         }
-      Debug.trace("TIME for initial queue:", getTimer()-t);
-      t = getTimer();
       while (queue.length > 0) {
         p = queue.shift();
 
@@ -141,7 +142,7 @@ package {
             var newElevation:Number = 0.01 + attr[p].elevation;
             var changed:Boolean = false;
             if (!attr[q].water && !attr[p].water) {
-              newElevation += mapRandom.nextDoubleRange(1, 2);
+              newElevation += 1;
             }
             if (attr[q].elevation == null || newElevation < attr[q].elevation) {
               attr[q].elevation = newElevation;
@@ -202,16 +203,12 @@ package {
       Debug.trace("TIME for elevation rescaling:", getTimer()-t);
       
 
-      // Choose polygon biomes based on elevation, water, ocean
-      t = getTimer();
-      assignTerrains(points, attr);
-      Debug.trace("TIME for terrain assignment:", getTimer()-t);
-                              
       // Create rivers. Pick a random point, then move downslope
       t = getTimer();
       for (i = 0; i < SIZE/2; i++) {
         p = points[mapRandom.nextIntRange(0, NUM_POINTS-1)];
         if (attr[p].water || attr[p].elevation < 0.3 || attr[p].elevation > 0.9) continue;
+        // Bias rivers to go west: if (attr[p].downslope.x > p.x) continue;
         while (!attr[p].ocean) {
           if (attr[p].river == null) attr[p].river = 0;
           attr[p].river = attr[p].river + 1;
@@ -224,24 +221,61 @@ package {
       }
       Debug.trace("TIME for river paths:", getTimer()-t);
 
+      
+      // Calculate moisture. Rivers and lakes get high moisture, and
+      // moisture drops off from there. Oceans get high moisture but
+      // moisture does not propagate from oceans (we set it at the
+      // end, after propagation). TODO: the parameters (1.5, 0.2, 0.9)
+      // are tuned for NUM_POINTS = 2000, and it's not clear how they
+      // should be adjusted for other scales.
+      t = getTimer();
+      queue = [];
+      for each (p in points) {
+          if ((attr[p].water || attr[p].river) && !attr[p].ocean) {
+            attr[p].moisture = attr[p].river? Math.min(1.5, (0.2 * attr[p].river)) : 1.0;
+            queue.push(p);
+          } else {
+            attr[p].moisture = 0.0;
+          }
+        }
+      while (queue.length > 0) {
+        p = queue.shift();
+
+        for each (q in attr[p].neighbors) {
+            var newMoisture:Number = attr[p].moisture * 0.80;
+            if (newMoisture > attr[q].moisture) {
+              attr[q].moisture = newMoisture;
+              queue.push(q);
+            }
+          }
+      }
+      for each (p in points) {
+          if (attr[p].ocean) attr[p].moisture = 0.8;
+        }
+      Debug.trace("TIME for moisture calculation:", getTimer()-t);
+
+      
+      // Choose polygon biomes based on elevation, water, ocean
+      t = getTimer();
+      assignTerrains(points, attr);
+      Debug.trace("TIME for terrain assignment:", getTimer()-t);
+
+      
       // For all edges between polygons, build a noisy line path that
       // we can reuse while drawing both polygons connected to that edge
       t = getTimer();
       buildNoisyEdges(points, attr);
       Debug.trace("TIME for noisy edge construction:", getTimer()-t);
 
-      var p:Point, q:Point, r:Point, s:Point;
-
       t = getTimer();
       renderPolygons(graphics, points, displayColors, attr, true, null, null);
+
       Debug.trace("TIME for polygon rendering:", getTimer()-t);
       t = getTimer();
       renderRivers(graphics, points, displayColors, voronoi, attr);
       Debug.trace("TIME for edge rendering:", getTimer()-t);
 
-      t = getTimer();
       setupExport(points, voronoi, attr);
-      Debug.trace("TIME for export setup:", getTimer()-t);
     }
 
 
@@ -362,31 +396,29 @@ package {
     // Assign a terrain type to each polygon
     public function assignTerrains(points:Vector.<Point>, attr:Dictionary):void {
       for each (var p:Point in points) {
-          if (attr[p].ocean) {
-            attr[p].biome = 'OCEAN';
-          } else if (attr[p].water) {
-            attr[p].biome = 'LAKE';
-            if (attr[p].elevation < 0.1) attr[p].biome = 'MARSH';
-            if (attr[p].elevation > 0.7) attr[p].biome = 'ICE';
-            if (attr[p].elevation > 0.9) attr[p].biome = 'SCORCHED';
-          } else if (attr[p].coast) {
-            attr[p].biome = 'BEACH';
-          } else if (attr[p].elevation > 0.99) {
-            attr[p].biome = 'LAVA';
-          } else if (attr[p].elevation > 0.9) {
-            attr[p].biome = 'SCORCHED';
-          } else if (attr[p].elevation > 0.8) {
-            attr[p].biome = 'SNOW';
-          } else if (attr[p].elevation > 0.7) {
-            attr[p].biome = 'SAVANNAH'; 
-          } else if (attr[p].elevation > 0.6) {
-            attr[p].biome = 'GRASSLANDS';
-          } else if (attr[p].elevation > 0.4) {
-            attr[p].biome = 'DRY_FOREST';
-          }  else if (attr[p].elevation > 0.0) {
-            attr[p].biome = 'RAIN_FOREST';
+          var A:Object = attr[p];
+          if (A.ocean) {
+            A.biome = 'OCEAN';
+          } else if (A.water) {
+            A.biome = 'LAKE';
+            if (A.elevation < 0.1) A.biome = 'MARSH';
+            if (A.elevation > 0.7) A.biome = 'ICE';
+          } else if (A.coast) {
+            A.biome = 'BEACH';
+          } else if (A.elevation > 0.85) {
+            if (A.moisture > 0.5) A.biome = 'SNOW';
+            else if (A.moisture > 0.3) A.biome = 'BARE'; 
+            else A.biome = 'SCORCHED';
+          } else if (A.elevation > 0.2) {
+            if (A.moisture > 0.8) A.biome = 'DRY_FOREST';
+            else if (A.moisture > 0.5) A.biome = 'GRASSLANDS';
+            else if (A.moisture > 0.235) A.biome = 'SAVANNAH';
+            else A.biome = 'DESERT';
           } else {
-            attr[p].biome = 'SWAMP';
+            if (A.moisture > 0.9) A.biome = 'SWAMP';
+            else if (A.moisture > 0.5) A.biome = 'RAIN_FOREST';
+            else if (A.moisture > 0.235) A.biome = 'GRASSLANDS';
+            else A.biome = 'DESERT';
           }
         }
     }
@@ -471,8 +503,22 @@ package {
           for each (q in attr[p].neighbors) {
               var color:int = colors[attr[p].biome];
               if (altitudeFunction != null) {
-                color = (altitudeFunction(p, q, attr) << 16) | (color & 0xffff);
+                color = (altitudeFunction(p, q, attr) << 16) | (color & 0x00ffff);
               }
+              if (moistureFunction != null) {
+                color = (moistureFunction(p, q, attr) << 8) | (color & 0xff00ff);
+              }
+              /* HACK: draw moisture level
+              color = int(255*(0.667*attr[p].moisture+0.333*attr[q].elevation));
+              if (color > 255) color = 255;
+              color = color | 0x777700;
+*/
+              /* HACK: draw altitude level
+                 color = int(255*(0.667*attr[p].elevation+0.333*attr[q].elevation));
+                 if (color > 255) color = 255;
+                 color = (color << 8) | (color << 16) | 0x77;
+*/
+                   
               if (texturedFills) {
                 graphics.beginBitmapFill(getBitmapTexture(color));
               } else {
@@ -535,7 +581,9 @@ package {
           // Lava flow
           if (!attr[dedge.p0].water && !attr[dedge.p1].water
               && !attr[dedge.p0].river && !attr[dedge.p1].river
-              && (attr[dedge.p0].elevation > 0.9 || attr[dedge.p1].elevation > 0.9)) {
+              && (attr[dedge.p0].elevation > 0.9 || attr[dedge.p1].elevation > 0.9)
+              && (attr[dedge.p0].moisture < 0.5 && attr[dedge.p1].moisture < 0.5)
+              && mapRandom.nextIntRange(0, 2) == 0) {
             noisy_line.drawLineP(graphics, vedge.p0, p, midpoint, r, {color: colors.LAVA, width: 5*(attr[dedge.p0].elevation - 0.7), minLength: 1});
             noisy_line.drawLineP(graphics, midpoint, q, vedge.p1, s, {color: colors.LAVA, width: 5*(attr[dedge.p1].elevation - 0.7), minLength: 1});
           }
@@ -594,9 +642,11 @@ package {
       ICE: 0xeeff40,
       SCORCHED: 0xdd0000,
       BEACH: 0x034400,
+      BARE: 0xee0000,
       LAVA: 0xee0020,
       SNOW: 0xeeff30,
-      SAVANNAH: 0xcc2200,
+      DESERT: 0x990000,
+      SAVANNAH: 0x992200,
       GRASSLANDS: 0x994400,
       DRY_FOREST: 0x666600,
       RAIN_FOREST: 0x448800,
@@ -619,7 +669,7 @@ package {
         if (altitude.length == 0) {
           var export:BitmapData = new BitmapData(2048, 2048);
           var exportGraphics:Shape = new Shape();
-          renderPolygons(exportGraphics.graphics, points, exportColors, attr, false, exportAltitudeFunction, null);
+          renderPolygons(exportGraphics.graphics, points, exportColors, attr, false, exportAltitudeFunction, exportMoistureFunction);
           renderRivers(exportGraphics.graphics, points, exportColors, voronoi, attr);
           var m:Matrix = new Matrix();
           m.scale(2048.0 / SIZE, 2048.0 / SIZE);
@@ -640,10 +690,19 @@ package {
 
     public function exportAltitudeFunction(p:Point, q:Point, attr:Dictionary):int {
       var elevation:Number = (0.667 * attr[p].elevation + 0.333 * attr[q].elevation);
-      var c:int = 255 * elevation * elevation;
+      var c:int = 255 * elevation;
       if (attr[p].biome == 'BEACH') c = 3;
       else if (attr[p].ocean) c = 0;
       else c += 6;
+      if (c < 0) c = 0;
+      if (c > 255) c = 255;
+      return c;
+    }
+
+
+    public function exportMoistureFunction(p:Point, q:Point, attr:Dictionary):int {
+      var moisture:Number = (0.667 * attr[p].moisture + 0.333 * attr[q].moisture);
+      var c:int = 255 * moisture;
       if (c < 0) c = 0;
       if (c > 255) c = 255;
       return c;
