@@ -21,8 +21,8 @@ package {
   public class voronoi_set extends Sprite {
     static public var NUM_POINTS:int = 2000;
     static public var SIZE:int = 600;
-    static public var ISLAND_FACTOR:Number = 1.1;  // 1.0 means no small islands; 2.0 leads to a lot
-    static public var NOISY_LINE_TRADEOFF:Number = 0.6;  // low: jagged vedge; high: jagged dedge
+    static public var ISLAND_FACTOR:Number = 1.07;  // 1.0 means no small islands; 2.0 leads to a lot
+    static public var NOISY_LINE_TRADEOFF:Number = 0.1;  // low: jagged vedge; high: jagged dedge
     
     static public var displayColors:Object = {
       OCEAN: 0x555599,
@@ -333,8 +333,8 @@ package {
       Debug.trace("TIME for noisy edge construction:", getTimer()-t);
 
 
-      // Render the polygons first, then select edges (rivers, lava,
-      // coastline, lakeshores) 
+      // Render the polygons first, including polygon edges
+      // (coastline, lakeshores), then other edges (rivers, lava)
       t = getTimer();
       renderPolygons(graphics, points, displayColors, attr, true, null, null);
       renderRivers(graphics, points, displayColors, voronoi, attr);
@@ -602,7 +602,7 @@ package {
               if (attr[p].ocean != attr[q].ocean) {
                 // One side is ocean and the other side is land -- coastline
                 graphics.lineStyle(2, colors.COAST);
-              } else if (attr[p].water != attr[q].water) {
+              } else if (attr[p].water != attr[q].water && attr[p].biome != 'ICE' && attr[q].biome != 'ICE') {
                 // Lake boundary
                 graphics.lineStyle(1, colors.LAKESHORE);
               }
