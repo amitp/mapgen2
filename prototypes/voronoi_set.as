@@ -11,6 +11,7 @@ package {
   import flash.utils.ByteArray;
   import flash.utils.getTimer;
   import flash.net.FileReference;
+  import flash.system.System;
   import com.nodename.geom.Circle;
   import com.nodename.geom.LineSegment;
   import com.nodename.Delaunay.Edge;
@@ -45,7 +46,11 @@ package {
 
     public var islandRandom:PM_PRNG = new PM_PRNG(487);
     public var mapRandom:PM_PRNG = new PM_PRNG(487);
-    
+
+    public var points:Vector.<Point> = new Vector.<Point>();
+    public var attr:Dictionary;
+    public var voronoi:Voronoi;
+
     public function voronoi_set() {
       stage.scaleMode = 'noScale';
       stage.align = 'TL';
@@ -78,13 +83,23 @@ package {
       var i:int, j:int, t:Number;
       var p:Point, q:Point, r:Point, s:Point;
 
+      if (attr) {
+        for (var key:Object in attr) {
+          delete attr[key];
+        }
+      }
+      attr = new Dictionary(true);
+      points.splice(0, points.length);
+      if (voronoi) voronoi.dispose();
+
+      System.gc();
+      Debug.trace("MEMORY BEFORE:", System.totalMemory);
+      
       // Generate random points and assign them to be on the island or
       // in the water. Some water points are inland lakes; others are
       // ocean. We'll determine ocean later by looking at what's
       // connected to ocean.
       t = getTimer();
-      var points:Vector.<Point> = new Vector.<Point>();
-      var attr:Dictionary = new Dictionary();
       for (i = 0; i < NUM_POINTS; i++) {
         p = new Point(mapRandom.nextDoubleRange(10, SIZE-10),
                       mapRandom.nextDoubleRange(10, SIZE-10));
@@ -98,7 +113,7 @@ package {
       Debug.trace("TIME for random points:", getTimer()-t);
 
       t = getTimer();
-      var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
+      voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
       Debug.trace("TIME for voronoi:", getTimer()-t);
 
       // Create a graph structure from the voronoi edge list
@@ -275,7 +290,9 @@ package {
       renderRivers(graphics, points, displayColors, voronoi, attr);
       Debug.trace("TIME for edge rendering:", getTimer()-t);
 
-      setupExport(points, voronoi, attr);
+      setupExport();
+
+      Debug.trace("MEMORY AFTER:", System.totalMemory);
     }
 
 
@@ -657,32 +674,31 @@ package {
     public var altitude:ByteArray = new ByteArray();
     public var moisture:ByteArray = new ByteArray();
     public var override:ByteArray = new ByteArray();
-    // This function fills in the above three arrays
-    public var fillExportBitmaps:Function;
     
-    public function setupExport(points:Vector.<Point>, voronoi:Voronoi, attr:Dictionary):void {
+    public function setupExport():void {
       altitude.clear();
       moisture.clear();
       override.clear();
-      
-      fillExportBitmaps = function():void {
-        if (altitude.length == 0) {
-          var export:BitmapData = new BitmapData(2048, 2048);
-          var exportGraphics:Shape = new Shape();
-          renderPolygons(exportGraphics.graphics, points, exportColors, attr, false, exportAltitudeFunction, exportMoistureFunction);
-          renderRivers(exportGraphics.graphics, points, exportColors, voronoi, attr);
-          var m:Matrix = new Matrix();
-          m.scale(2048.0 / SIZE, 2048.0 / SIZE);
-          stage.quality = 'low';
-          export.draw(exportGraphics, m);
-          stage.quality = 'best';
-          for (var x:int = 0; x < 2048; x++) {
-            for (var y:int = 0; y < 2048; y++) {
-              var color:uint = export.getPixel(x, y);
-              altitude.writeByte((color >> 16) & 0xff);
-              moisture.writeByte((color >> 8) & 0xff);
-              override.writeByte(color & 0xff);
-            }
+    }
+
+    // This function fills in the above three arrays
+    public function fillExportBitmaps():void {
+      if (altitude.length == 0) {
+        var export:BitmapData = new BitmapData(2048, 2048);
+        var exportGraphics:Shape = new Shape();
+        renderPolygons(exportGraphics.graphics, points, exportColors, attr, false, exportAltitudeFunction, exportMoistureFunction);
+        renderRivers(exportGraphics.graphics, points, exportColors, voronoi, attr);
+        var m:Matrix = new Matrix();
+        m.scale(2048.0 / SIZE, 2048.0 / SIZE);
+        stage.quality = 'low';
+        export.draw(exportGraphics, m);
+        stage.quality = 'best';
+        for (var x:int = 0; x < 2048; x++) {
+          for (var y:int = 0; y < 2048; y++) {
+            var color:uint = export.getPixel(x, y);
+            altitude.writeByte((color >> 16) & 0xff);
+            moisture.writeByte((color >> 8) & 0xff);
+            override.writeByte(color & 0xff);
           }
         }
       }
