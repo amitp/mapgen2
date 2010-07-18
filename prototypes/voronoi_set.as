@@ -22,7 +22,8 @@ package {
     static public var NUM_POINTS:int = 2000;
     static public var SIZE:int = 600;
     static public var ISLAND_FACTOR:Number = 1.1;  // 1.0 means no small islands; 2.0 leads to a lot
-
+    static public var NOISY_LINE_TRADEOFF:Number = 0.6;  // low: jagged vedge; high: jagged dedge
+    
     static public var displayColors:Object = {
       OCEAN: 0x555599,
       COAST: 0x444477,
@@ -47,10 +48,16 @@ package {
     public var islandRandom:PM_PRNG = new PM_PRNG(487);
     public var mapRandom:PM_PRNG = new PM_PRNG(487);
 
-    public var points:Vector.<Point> = new Vector.<Point>();
-    public var attr:Dictionary;
+    // These store the graph data
     public var voronoi:Voronoi;
+    public var points:Vector.<Point>;
+    public var attr:Dictionary;
 
+    // These are empty when we make a map, and filled in on export
+    public var exportAltitude:ByteArray = new ByteArray();
+    public var exportMoisture:ByteArray = new ByteArray();
+    public var exportOverride:ByteArray = new ByteArray();
+    
     public function voronoi_set() {
       stage.scaleMode = 'noScale';
       stage.align = 'TL';
@@ -82,18 +89,37 @@ package {
 
       var i:int, j:int, t:Number;
       var p:Point, q:Point, r:Point, s:Point;
+      var t0:Number = getTimer();
 
+      // Break cycles before we remove the reference to attr;
+      // otherwise the garbage collector won't release it.
       if (attr) {
         for (var key:Object in attr) {
           delete attr[key];
         }
       }
-      attr = new Dictionary(true);
-      points.splice(0, points.length);
-      if (voronoi) voronoi.dispose();
+      if (points) {
+        points.splice(0, points.length);
+      }
+      if (voronoi) {
+        voronoi.dispose();
+        voronoi = null;
+      }
+
+      // Clear the previous graph data. We'll reuse attr and points
+      // when we can, but there's no easy way to reuse the Voronoi
+      // object, so we'll allocate a new one.
+      if (!attr) attr = new Dictionary(true);
+      if (!points) points = new Vector.<Point>();
+      
+      // Clear the previous export bitmap data
+      exportAltitude.clear();
+      exportMoisture.clear();
+      exportOverride.clear();
 
       System.gc();
       Debug.trace("MEMORY BEFORE:", System.totalMemory);
+
       
       // Generate random points and assign them to be on the island or
       // in the water. Some water points are inland lakes; others are
@@ -112,11 +138,20 @@ package {
       }
       Debug.trace("TIME for random points:", getTimer()-t);
 
+      
+      // Build the Voronoi structure with our random points
       t = getTimer();
       voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
       Debug.trace("TIME for voronoi:", getTimer()-t);
 
-      // Create a graph structure from the voronoi edge list
+
+      // Create a graph structure from the Voronoi edge list. The
+      // methods in the Voronoi object are somewhat inconvenient for
+      // my needs, so I transform that data into the data I actually
+      // need: edges connected to the Delaunay triangles and the
+      // Voronoi polygons, a reverse map from those four points back
+      // to the edge, and a map from these four points to the points
+      // they connect to.
       t = getTimer();
       for each (p in points) {
           // Workaround for Voronoi lib bug: we need to call region()
@@ -128,6 +163,7 @@ package {
       buildGraph(voronoi, attr);
       Debug.trace("TIME for buildGraph:", getTimer()-t);
       
+
       // Determine the elevations and oceans. By construction, we have
       // no local minima. This is important for the downslope vectors
       // later, which are used in the river construction
@@ -150,27 +186,37 @@ package {
             queue.push(p);
           }
         }
+      // Traverse the graph and assign elevations to each point. As we
+      // move away from the coastline, increase the elevations. This
+      // guarantees that rivers always have a way down to the coast by
+      // going downhill (no local minima).
       while (queue.length > 0) {
         p = queue.shift();
 
         for each (q in attr[p].neighbors) {
+            // Every step up is epsilon, unless it's over land, in
+            // which case it's 1. The number doesn't matter because
+            // we'll rescale the elevations later.
             var newElevation:Number = 0.01 + attr[p].elevation;
-            var changed:Boolean = false;
             if (!attr[q].water && !attr[p].water) {
               newElevation += 1;
             }
+            // If anything has changed, we'll add this point to the
+            // queue so that we can process its neighbors too.
+            var changed:Boolean = false;
             if (attr[q].elevation == null || newElevation < attr[q].elevation) {
               attr[q].elevation = newElevation;
               changed = true;
             }
             if (attr[p].ocean && attr[q].water && !attr[q].ocean) {
-              // Oceans are all connected, but some bodies of water
-              // are not connected to oceans.
+              // The coastline algorithm marks water/land. The oceans
+              // are the water areas connected to the initial ocean
+              // seed; all other water areas will be treated as lakes. 
               attr[q].ocean = true;
               changed = true;
             }
             if (attr[p].ocean && !attr[q].ocean && !attr[q].coast) {
-              // Coasts are land, but connected to oceans
+              // Coastal areas are land polygons with an ocean neighbor
               attr[q].coast = true;
               changed = true;
             }
@@ -277,22 +323,25 @@ package {
 
       
       // For all edges between polygons, build a noisy line path that
-      // we can reuse while drawing both polygons connected to that edge
+      // we can reuse while drawing both polygons connected to that
+      // edge. The noisy lines are constructed in two sections, going
+      // from the vertex to the midpoint. We don't construct the noisy
+      // lines from the polygon centers to the midpoints, because
+      // they're not needed for polygon filling.
       t = getTimer();
       buildNoisyEdges(points, attr);
       Debug.trace("TIME for noisy edge construction:", getTimer()-t);
 
+
+      // Render the polygons first, then select edges (rivers, lava,
+      // coastline, lakeshores) 
       t = getTimer();
       renderPolygons(graphics, points, displayColors, attr, true, null, null);
-
-      Debug.trace("TIME for polygon rendering:", getTimer()-t);
-      t = getTimer();
       renderRivers(graphics, points, displayColors, voronoi, attr);
-      Debug.trace("TIME for edge rendering:", getTimer()-t);
+      Debug.trace("TIME for rendering:", getTimer()-t);
 
-      setupExport();
 
-      Debug.trace("MEMORY AFTER:", System.totalMemory);
+      Debug.trace("MEMORY AFTER:", System.totalMemory, " TIME taken:", getTimer()-t0,"ms");
     }
 
 
@@ -410,7 +459,9 @@ package {
     }
 
     
-    // Assign a terrain type to each polygon
+    // Assign a terrain type to each polygon. If it has
+    // ocean/coast/water, then that's the terrain type; otherwise it
+    // depends on low/high elevation and low/medium/high moisture.
     public function assignTerrains(points:Vector.<Point>, attr:Dictionary):void {
       for each (var p:Point in points) {
           var A:Object = attr[p];
@@ -451,7 +502,7 @@ package {
           for each (var edge:Edge in attr[point].edges) {
               if (attr[edge].d0 && attr[edge].d1 && attr[edge].v0 && attr[edge].v1
                   && !attr[edge].path0) {
-                var f:Number = 0.6;  // low: jagged vedge; high: jagged dedge
+                var f:Number = NOISY_LINE_TRADEOFF;
                 var midpoint:Point = Point.interpolate(attr[edge].v0, attr[edge].v1, 0.5);
                 var p:Point = Point.interpolate(attr[edge].v0, attr[edge].d0, f);
                 var q:Point = Point.interpolate(attr[edge].v0, attr[edge].d1, f);
@@ -609,6 +660,7 @@ package {
       }
     }
   
+
     // Build a noisy bitmap tile for a given color
     private var _textures:Array = [];
     public function getBitmapTexture(color:uint):BitmapData {
@@ -640,6 +692,7 @@ package {
       return _textures[color];
     }
 
+
     //////////////////////////////////////////////////////////////////////
     // The following code is used to export the maps to disk
 
@@ -650,6 +703,7 @@ package {
     static public var exportColors:Object = {
       /* override codes are 0:none, 0x10:river water, 0x20:lava, 0x30:snow,
          0x40:ice, 0x50:ocean, 0x60:lake, 0x70:lake shore, 0x80:ocean shore */
+      // TODO: we only use the override code; remove the rest
       OCEAN: 0x00ff50,
       COAST: 0x00ff80,
       LAKE: 0x55ff60,
@@ -670,20 +724,11 @@ package {
       SWAMP: 0x33ff00
     };
 
-    // These are empty when we make a map, and filled in on export
-    public var altitude:ByteArray = new ByteArray();
-    public var moisture:ByteArray = new ByteArray();
-    public var override:ByteArray = new ByteArray();
     
-    public function setupExport():void {
-      altitude.clear();
-      moisture.clear();
-      override.clear();
-    }
-
-    // This function fills in the above three arrays
+    // This function draws to a bitmap and copies that data into the
+    // three export byte arrays
     public function fillExportBitmaps():void {
-      if (altitude.length == 0) {
+      if (exportAltitude.length == 0) {
         var export:BitmapData = new BitmapData(2048, 2048);
         var exportGraphics:Shape = new Shape();
         renderPolygons(exportGraphics.graphics, points, exportColors, attr, false, exportAltitudeFunction, exportMoistureFunction);
@@ -696,9 +741,9 @@ package {
         for (var x:int = 0; x < 2048; x++) {
           for (var y:int = 0; y < 2048; y++) {
             var color:uint = export.getPixel(x, y);
-            altitude.writeByte((color >> 16) & 0xff);
-            moisture.writeByte((color >> 8) & 0xff);
-            override.writeByte(color & 0xff);
+            exportAltitude.writeByte((color >> 16) & 0xff);
+            exportMoisture.writeByte((color >> 8) & 0xff);
+            exportOverride.writeByte(color & 0xff);
           }
         }
       }
@@ -738,6 +783,7 @@ package {
       return button;
     }
 
+    
     public function addGenerateButtons():void {
       addChild(makeButton("new shape", 650, 50,
                           function (e:Event):void {
@@ -752,22 +798,22 @@ package {
 
                
     public function addExportButtons():void {
-      addChild(makeButton("export altitude", 650, 150,
+      addChild(makeButton("export elevation", 650, 150,
                           function (e:Event):void {
                             fillExportBitmaps();
-                            new FileReference().save(altitude);
+                            new FileReference().save(exportAltitude);
                             e.stopPropagation();
                           }));
       addChild(makeButton("export moisture", 650, 180,
                           function (e:Event):void {
                             fillExportBitmaps();
-                            new FileReference().save(moisture);
+                            new FileReference().save(exportMoisture);
                             e.stopPropagation();
                           }));
       addChild(makeButton("export overrides", 650, 210,
                           function (e:Event):void {
                             fillExportBitmaps();
-                            new FileReference().save(override);
+                            new FileReference().save(exportOverride);
                             e.stopPropagation();
                           }));
     }
