@@ -112,12 +112,8 @@ package {
         
         // Subdivide the quadrilateral
         var p:Number = random(0.1, 0.9);  // vertical (along A-D and B-C)
-        var q:Number = random(0.3, 0.7);  // horizontal (along A-B and D-C)
-        
-        // Increase noise level by pushing away from the center
-        if (p < 0.5) p = 0.5*p; else p = 0.5+0.5*p;
-        if (q < 0.5) q = 0.5*q; else q = 0.5+0.5*q;
-        
+        var q:Number = random(0.1, 0.9);  // horizontal (along A-B and D-C)
+
         // Midpoints
         var E:Point = interpolateP(A, D, p);
         var F:Point = interpolateP(B, C, p);
