@@ -17,6 +17,8 @@ package {
   import com.nodename.Delaunay.Edge;
   import com.nodename.Delaunay.Voronoi;
   import de.polygonal.math.PM_PRNG;
+
+  // TODO: add more points near coastlines and lakes, and remove ocean points
   
   public class voronoi_set extends Sprite {
     static public var NUM_POINTS:int = 2000;
@@ -51,6 +53,7 @@ package {
     // These store the graph data
     public var voronoi:Voronoi;
     public var points:Vector.<Point>;
+    public var corners:Vector.<Point>;
     public var attr:Dictionary;
 
     // These are empty when we make a map, and filled in on export
@@ -101,6 +104,9 @@ package {
       if (points) {
         points.splice(0, points.length);
       }
+      if (corners) {
+        corners.splice(0, corners.length);
+      }
       if (voronoi) {
         voronoi.dispose();
         voronoi = null;
@@ -111,6 +117,7 @@ package {
       // object, so we'll allocate a new one.
       if (!attr) attr = new Dictionary(true);
       if (!points) points = new Vector.<Point>();
+      if (!corners) corners = new Vector.<Point>();
       
       // Clear the previous export bitmap data
       exportAltitude.clear();
@@ -131,6 +138,7 @@ package {
                       mapRandom.nextDoubleRange(10, SIZE-10));
         points.push(p);
         attr[p] = {
+          type: 'v',
           ocean: false,
           coast: false,
           water: !inside(island, p)
@@ -150,8 +158,8 @@ package {
       // my needs, so I transform that data into the data I actually
       // need: edges connected to the Delaunay triangles and the
       // Voronoi polygons, a reverse map from those four points back
-      // to the edge, and a map from these four points to the points
-      // they connect to.
+      // to the edge, a map from these four points to the points
+      // they connect to (both along the edge and crosswise).
       t = getTimer();
       for each (p in points) {
           // Workaround for Voronoi lib bug: we need to call region()
@@ -160,26 +168,29 @@ package {
         }
       Debug.trace("TIME for region workaround:", getTimer()-t);
       t = getTimer();
-      buildGraph(voronoi, attr);
+      buildGraph();
       Debug.trace("TIME for buildGraph:", getTimer()-t);
       
 
-      // Determine the elevations and oceans. By construction, we have
-      // no local minima. This is important for the downslope vectors
-      // later, which are used in the river construction
-      // algorithm. Also by construction, inlets/bays push low
-      // elevation areas inland, which means many rivers end up
-      // flowing out through them. Also by construction, lakes often
-      // end up on river paths because they don't raise the elevation
-      // as much as other terrain does. TODO: there are points that
-      // aren't being reached from this loop. Why?? We probably need
-      // to force the edges of the map to be ocean, altitude 0.
+      // Determine the elevations and oceans at Voronoi corners. By
+      // construction, we have no local minima. This is important for
+      // the downslope vectors later, which are used in the river
+      // construction algorithm. Also by construction, inlets/bays
+      // push low elevation areas inland, which means many rivers end
+      // up flowing out through them. Also by construction, lakes
+      // often end up on river paths because they don't raise the
+      // elevation as much as other terrain does.
       t = getTimer();
+      for each (p in corners) {
+          attr[p].ocean = false;
+          attr[p].coast = false;
+          attr[p].water = !inside(island, p);
+        }
+
       var queue:Array = [];
-      for each (p in points) {
-          // Start with a seed ocean in the upper left, and let it
-          // spread through anything already marked as ocean
-          if (p.x < 50 && p.y < 50) {
+      for each (p in corners) {
+          // The edges of the map are ocean
+          if (p.x == 0 || p.x == SIZE || p.y == 0 || p.y == SIZE) {
             attr[p].water = true;
             attr[p].ocean = true;
             attr[p].elevation = 0.0;
@@ -215,11 +226,6 @@ package {
               attr[q].ocean = true;
               changed = true;
             }
-            if (attr[p].ocean && !attr[q].ocean && !attr[q].coast) {
-              // Coastal areas are land polygons with an ocean neighbor
-              attr[q].coast = true;
-              changed = true;
-            }
             if (changed) {
               queue.push(q);
             }
@@ -227,7 +233,33 @@ package {
       }
       Debug.trace("TIME for elevation queue processing:", getTimer()-t);
 
+      
+      // Set the polygon attributes based on the computed corner
+      // attributes: all ocean means ocean, all land means land, and a
+      // mix means beach. TODO: we can get inland oceans near the
+      // coast; need to investigate, or calculate oceans as flood fill
+      // on polygons. TODO: all polygons bordering the boundary should
+      // be ocean (set all their corners to water)
+      for each (p in points) {
+          var numCoast:int = 0;
+          var numOcean:int = 0;
+          var numWater:int = 0;
+          var numLand:int = 0;
+          var sumElevation:Number = 0.0;
+          for each (q in attr[p].corners) {
+              numCoast += int(attr[q].coast);
+              numOcean += int(attr[q].ocean);
+              numWater += int(attr[q].water);
+              numLand += int(!attr[q].water);
+              sumElevation += attr[q].elevation;
+            }
+          attr[p].elevation = sumElevation / attr[p].corners.length;
+          attr[p].ocean = (numOcean > 0) && (numLand == 0);
+          attr[p].coast = (numOcean > 0) && (numLand > 0);
+          attr[p].water = attr[p].ocean || ((numWater >= numLand/2) && (numOcean == 0));
+        }
 
+      
       // Determine downslope paths. NOTE: we do this before calling
       // redistributeElevations because there's no guarantee that the
       // resulting elevations will have proper downslope paths. TODO:
@@ -244,6 +276,8 @@ package {
         }
       Debug.trace("TIME for downslope paths:", getTimer()-t);
 
+
+      // TODO: this should be on corner points
       
       // Rescale elevations so that the highest is 1.0, and they're
       // distributed well. We want lower elevations to be more common
@@ -334,7 +368,9 @@ package {
 
 
       // Render the polygons first, including polygon edges
-      // (coastline, lakeshores), then other edges (rivers, lava)
+      // (coastline, lakeshores), then other edges (rivers, lava).
+      // TODO: render all edges after all polygons, or the polygon
+      // drawing will draw over some of the edges.
       t = getTimer();
       renderPolygons(graphics, points, displayColors, attr, true, null, null);
       renderRivers(graphics, points, displayColors, voronoi, attr);
@@ -349,35 +385,88 @@ package {
     // information in the Voronoi results: attr[point].neighbors will
     // be a list of neighboring points of the same type (corner or
     // center); attr[point].edges will be a list of edges that include
-    // that point. Each edge connects to four points: the Voronoi edge
+    // that point; attr[point].type will be 'd' if it's a Delaunay
+    // triangle center and 'v' if it's a Voronoi polygon center. Each
+    // edge connects to four points: the Voronoi edge
     // attr[edge].{v0,v1} and its dual Delaunay triangle edge
-    // attr[edge].{d0,d1}.  For boundary polygons, the Delaunay edge
-    // will have one null point, and the Voronoi edge may be null.
-    public function buildGraph(voronoi:Voronoi, attr:Dictionary):void {
+    // attr[edge].{d0,d1}.  Also, attr[edge].type is 'e'. For boundary
+    // polygons, the Delaunay edge will have one null point, and the
+    // Voronoi edge may be null.
+    public function buildGraph():void {
+      var point:Point, other:Point;
       var edges:Vector.<Edge> = voronoi.edges();
+      // Build the graph skeleton for the polygon centers
+      for each (point in points) {
+          attr[point].edges = new Vector.<Edge>();
+          attr[point].neighbors = new  Vector.<Point>();
+          attr[point].corners = new Vector.<Point>();
+        }
+
+      // Workaround: the Voronoi library will allocate multiple corner
+      // Point objects; we need to put them into the corners list only
+      // once, so that we can use these points in a Dictionary.
+      function findCorner(p:Point):Point {
+        // TODO: this is inefficient! Either sort the array or build
+        // buckets. It's safe to sort here because we're not iterating
+        // over the corners, but how often do we want to re-sort?
+        if (p == null) return p;
+        for each (var q:Point in corners) {
+            var dx:Number = p.x - q.x;
+            var dy:Number = p.y - q.y;
+            if (dx*dx + dy*dy < 1e-6) {
+              return q;
+            }
+          }
+        return p;
+      }
+    
+      function fillAttr(edge:Edge, points:Array, duals:Array):void {
+        var point:Point, other:Point;
+        for each (point in points) {
+            var A:Object = attr[point];
+            A.edges.push(edge);
+            for each (other in points) {
+                if (point != other) A.neighbors.push(other);
+              }
+            for each (other in duals) {
+                if (A.corners.indexOf(other) < 0) A.corners.push(other);
+              }
+          }
+      }
+
       for each (var edge:Edge in edges) {
           var dedge:LineSegment = edge.delaunayLine();
           var vedge:LineSegment = edge.voronoiEdge();
 
-          // Per point attributes: neighbors and edges
-          for each (var point:Point in [dedge.p0, dedge.p1, vedge.p0, vedge.p1]) {
-              if (point == null) { continue; }
-              if (attr[point] == null) attr[point] = {};
-              if (attr[point].edges == null) attr[point].edges = new Vector.<Edge>();
-              if (attr[point].neighbors == null) attr[point].neighbors = new Vector.<Point>();
-              attr[point].edges.push(edge);
-            }
-          if (dedge.p0 != null && dedge.p1 != null) {
-            attr[dedge.p0].neighbors.push(dedge.p1);
-            attr[dedge.p1].neighbors.push(dedge.p0);
+          // The Voronoi library generates multiple Point objects for
+          // corners, and we need to have just one so we can index.
+          vedge.p0 = findCorner(vedge.p0);
+          vedge.p1 = findCorner(vedge.p1);
+          
+          // Build the graph skeleton for the corners
+          for each (point in [vedge.p0, vedge.p1]) {
+              if (point != null && attr[point] == null) {
+                corners.push(point);
+                attr[point] = {
+                  type: 'd',
+                  edges: new Vector.<Edge>(),
+                  neighbors: new Vector.<Point>(),
+                  corners: new Vector.<Point>()
+                };
+              }
           }
-          if (vedge.p0 != null && vedge.p1 != null) {
-            attr[vedge.p0].neighbors.push(vedge.p1);
-            attr[vedge.p1].neighbors.push(vedge.p0);
-          }
+          // Fill the graph data for polygons and corners
+          var vpoints:Array = [];
+          var dpoints:Array = [];
+          if (dedge.p0 != null) vpoints.push(dedge.p0);
+          if (dedge.p1!= null) vpoints.push(dedge.p1);
+          if (vedge.p0 != null) dpoints.push(vedge.p0);
+          if (vedge.p1 != null) dpoints.push(vedge.p1);
+          fillAttr(edge, dpoints, vpoints);
+          fillAttr(edge, vpoints, dpoints);
           
           // Per edge attributes
-          attr[edge] = {};
+          attr[edge] = {type: 'e'};
           attr[edge].v0 = vedge.p0;
           attr[edge].v1 = vedge.p1;
           attr[edge].d0 = dedge.p0;
