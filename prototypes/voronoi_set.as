@@ -138,10 +138,7 @@ package {
                       mapRandom.nextDoubleRange(10, SIZE-10));
         points.push(p);
         attr[p] = {
-          type: 'v',
-          ocean: false,
-          coast: false,
-          water: !inside(island, p)
+          type: 'v'
         };
       }
       Debug.trace("TIME for random points:", getTimer()-t);
@@ -172,7 +169,7 @@ package {
       Debug.trace("TIME for buildGraph:", getTimer()-t);
       
 
-      // Determine the elevations and oceans at Voronoi corners. By
+      // Determine the elevations and water at Voronoi corners. By
       // construction, we have no local minima. This is important for
       // the downslope vectors later, which are used in the river
       // construction algorithm. Also by construction, inlets/bays
@@ -182,18 +179,15 @@ package {
       // elevation as much as other terrain does.
       t = getTimer();
       for each (p in corners) {
-          attr[p].ocean = false;
-          attr[p].coast = false;
           attr[p].water = !inside(island, p);
         }
 
       var queue:Array = [];
       for each (p in corners) {
-          // The edges of the map are ocean
+          // The edges of the map are elevation 0
           if (p.x == 0 || p.x == SIZE || p.y == 0 || p.y == SIZE) {
-            attr[p].water = true;
-            attr[p].ocean = true;
             attr[p].elevation = 0.0;
+            attr[p].border = true;
             queue.push(p);
           }
         }
@@ -205,79 +199,83 @@ package {
         p = queue.shift();
 
         for each (q in attr[p].neighbors) {
-            // Every step up is epsilon, unless it's over land, in
-            // which case it's 1. The number doesn't matter because
-            // we'll rescale the elevations later.
+            // Every step up is epsilon over water or 1 over land. The
+            // number doesn't matter because we'll rescale the
+            // elevations later.
             var newElevation:Number = 0.01 + attr[p].elevation;
             if (!attr[q].water && !attr[p].water) {
               newElevation += 1;
             }
-            // If anything has changed, we'll add this point to the
-            // queue so that we can process its neighbors too.
-            var changed:Boolean = false;
+            // If this point changed, we'll add it to the queue so
+            // that we can process its neighbors too.
             if (attr[q].elevation == null || newElevation < attr[q].elevation) {
               attr[q].elevation = newElevation;
-              changed = true;
-            }
-            if (attr[p].ocean && attr[q].water && !attr[q].ocean) {
-              // The coastline algorithm marks water/land. The oceans
-              // are the water areas connected to the initial ocean
-              // seed; all other water areas will be treated as lakes. 
-              attr[q].ocean = true;
-              changed = true;
-            }
-            if (changed) {
               queue.push(q);
             }
           }
       }
       Debug.trace("TIME for elevation queue processing:", getTimer()-t);
 
-      
-      // Set the polygon attributes based on the computed corner
-      // attributes: all ocean means ocean, all land means land, and a
-      // mix means beach. TODO: we can get inland oceans near the
-      // coast; need to investigate, or calculate oceans as flood fill
-      // on polygons. TODO: all polygons bordering the boundary should
-      // be ocean (set all their corners to water)
-      for each (p in points) {
-          var numCoast:int = 0;
-          var numOcean:int = 0;
-          var numWater:int = 0;
-          var numLand:int = 0;
-          var sumElevation:Number = 0.0;
-          for each (q in attr[p].corners) {
-              numCoast += int(attr[q].coast);
-              numOcean += int(attr[q].ocean);
-              numWater += int(attr[q].water);
-              numLand += int(!attr[q].water);
-              sumElevation += attr[q].elevation;
-            }
-          attr[p].elevation = sumElevation / attr[p].corners.length;
-          attr[p].ocean = (numOcean > 0) && (numLand == 0);
-          attr[p].coast = (numOcean > 0) && (numLand > 0);
-          attr[p].water = attr[p].ocean || ((numWater >= numLand/2) && (numOcean == 0));
-        }
 
-      
-      // Determine downslope paths. NOTE: we do this before calling
-      // redistributeElevations because there's no guarantee that the
-      // resulting elevations will have proper downslope paths. TODO:
-      // redistributeElevations should be order-preserving.
-      t = getTimer();
+      // Compute polygon attributes 'ocean' and 'water' based on the
+      // corner attributes. Count the water corners per
+      // polygon. Oceans are all polygons connected to the edge of the
+      // map. In the first pass, mark the edges of the map as ocean;
+      // in the second pass, mark any water-containing polygon
+      // connected an ocean as ocean.
       for each (p in points) {
-          r = p;
-          for each (q in attr[p].neighbors) {
-              if (attr[q].elevation <= attr[r].elevation) {
-                r = q;
+          for each (q in attr[p].corners) {
+              if (attr[q].border) {
+                attr[p].border = true;
+                attr[p].ocean = true;
+                queue.push(p);
+              }
+              if (attr[q].water) {
+                attr[p].water = (attr[p].water || 0) + 1;
               }
             }
-          attr[p].downslope = r;
         }
-      Debug.trace("TIME for downslope paths:", getTimer()-t);
+      while (queue.length > 0) {
+        p = queue.shift();
+        for each (q in attr[p].neighbors) {
+            if (attr[q].water && !attr[q].ocean) {
+              attr[q].ocean = true;
+              queue.push(q);
+            }
+          }
+      }
+      
+      // Set the polygon attribute 'coast' based on its neighbors. If
+      // it has at least one ocean and at least one land neighbor,
+      // then this is a coastal polygon.
+      for each (p in points) {
+          var numOcean:int = 0;
+          var numLand:int = 0;
+          for each (q in attr[p].neighbors) {
+              numOcean += int(attr[q].ocean);
+              numLand += int(!attr[q].water);
+            }
+          attr[p].coast = (numOcean > 0) && (numLand > 0);
+        }
 
 
-      // TODO: this should be on corner points
+      // Set the corner attributes based on the computed polygon
+      // attributes. If all polygons connected to this corner are
+      // ocean, then it's ocean; if all are land, then it's land;
+      // otherwise it's coast. We no longer want the 'water'
+      // attribute; that was used only to determine polygon types.
+      for each (p in corners) {
+          numOcean = 0;
+          numLand = 0;
+          for each (q in attr[p].corners) {
+              numOcean += int(attr[q].ocean);
+              numLand += int(!attr[q].water);
+            }
+          attr[p].ocean = (numOcean == attr[p].corners.length);
+          attr[p].coast = (numOcean > 0) && (numLand > 0);
+          attr[p].water = (numLand != attr[p].corners.length) && !attr[p].coast;
+        }
+
       
       // Rescale elevations so that the highest is 1.0, and they're
       // distributed well. We want lower elevations to be more common
@@ -289,7 +287,7 @@ package {
       t = getTimer();
 
       var landPoints:Vector.<Point> = new Vector.<Point>();  // only non-ocean
-      for each (p in points) {
+      for each (p in corners) {
           if (!attr[p].ocean) landPoints.push(p);
         }
       redistributeElevations(landPoints, attr);
@@ -298,19 +296,48 @@ package {
       Debug.trace("TIME for elevation rescaling:", getTimer()-t);
       
 
-      // Create rivers. Pick a random point, then move downslope
+      // Determine downslope paths.  At every point, we point to the
+      // point downstream from it, or to itself.  This is used for
+      // generating rivers and watersheds.
+      t = getTimer();
+      for each (p in corners) {
+          r = p;
+          for each (q in attr[p].neighbors) {
+              if (attr[q].elevation <= attr[r].elevation) {
+                r = q;
+              }
+            }
+          attr[p].downslope = r;
+        }
+      Debug.trace("TIME for downslope paths:", getTimer()-t);
+
+
+      // Compute polygon elevations as the average of the corner elevations
+      for each (p in points) {
+          var sumElevation:Number = 0.0;
+          for each (q in attr[p].corners) {
+              sumElevation += attr[q].elevation;
+            }
+          attr[p].elevation = sumElevation / attr[p].corners.length;
+        }
+
+      
+      // Create rivers. Pick a random point, then move downslope. Mark
+      // the *edges* as rivers instead of marking polygons or corners.
       t = getTimer();
       for (i = 0; i < SIZE/2; i++) {
-        p = points[mapRandom.nextIntRange(0, NUM_POINTS-1)];
-        if (attr[p].water || attr[p].elevation < 0.3 || attr[p].elevation > 0.9) continue;
+        p = corners[mapRandom.nextIntRange(0, corners.length-1)];
+        if (attr[p].ocean || attr[p].elevation < 0.3 || attr[p].elevation > 0.9) continue;
         // Bias rivers to go west: if (attr[p].downslope.x > p.x) continue;
-        while (!attr[p].ocean) {
-          if (attr[p].river == null) attr[p].river = 0;
-          attr[p].river = attr[p].river + 1;
+        while (!attr[p].coast) {
           if (p == attr[p].downslope) {
             Debug.trace("Downslope failed", attr[p].elevation);
             break;
           }
+          var edge:Edge = lookupEdgeFromCorner(p, attr[p].downslope);
+          attr[edge].river = (attr[edge].river || 0) + 1;
+          attr[p].river = (attr[p].river || 0) + 1;
+          attr[attr[p].downslope].river = (attr[attr[p].downslope].river || 0) + 1;
           p = attr[p].downslope;
         }
       }
@@ -325,7 +352,7 @@ package {
       // should be adjusted for other scales.
       t = getTimer();
       queue = [];
-      for each (p in points) {
+      for each (p in corners) {
           if ((attr[p].water || attr[p].river) && !attr[p].ocean) {
             attr[p].moisture = attr[p].river? Math.min(1.5, (0.2 * attr[p].river)) : 1.0;
             queue.push(p);
@@ -345,6 +372,13 @@ package {
           }
       }
       for each (p in points) {
+          var sumMoisture:Number = 0.0;
+          for each (q in attr[p].corners) {
+              sumMoisture += attr[q].moisture;
+            }
+          attr[p].moisture = sumMoisture / attr[p].corners.length;
+        }
+      for each (p in corners) {
           if (attr[p].ocean) attr[p].moisture = 0.8;
         }
       Debug.trace("TIME for moisture calculation:", getTimer()-t);
@@ -611,10 +645,18 @@ package {
     }
     
 
-    // Look up a Voronoi Edge object given two adjacent Voronoi polygons
-    public function lookupEdge(p:Point, q:Point, attr:Dictionary):Edge {
+    // Look up a Voronoi Edge object given two adjacent Voronoi
+    // polygons, or two adjacent Voronoi corners
+    public function lookupEdgeFromCenter(p:Point, q:Point):Edge {
       for each (var edge:Edge in attr[p].edges) {
           if (attr[edge].d0 == q || attr[edge].d1 == q) return edge;
+        }
+      return null;
+    }
+
+    public function lookupEdgeFromCorner(p:Point, q:Point):Edge {
+      for each (var edge:Edge in attr[p].edges) {
+          if (attr[edge].v0 == q || attr[edge].v1 == q) return edge;
         }
       return null;
     }
@@ -682,18 +724,27 @@ package {
                 graphics.beginFill(color);
               }
               graphics.moveTo(p.x, p.y);
-              var edge:Edge = lookupEdge(p, q, attr);
+              var edge:Edge = lookupEdgeFromCenter(p, q);
               if (attr[edge].path0 == null || attr[edge].path1 == null) {
+                // It's at the edge of the map, where we don't have
+                // the noisy edges computed. TODO: fill these in with
+                // non-noisy lines.
                 continue;
-                Debug.trace("NULL PATH", attr[edge].d0 == p, attr[edge].d0 == q);
               }
               graphics.lineTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
               if (attr[p].ocean != attr[q].ocean) {
                 // One side is ocean and the other side is land -- coastline
                 graphics.lineStyle(2, colors.COAST);
-              } else if (attr[p].water != attr[q].water && attr[p].biome != 'ICE' && attr[q].biome != 'ICE') {
+              } else if ((attr[p].water > 0) != (attr[q].water > 0) && attr[p].biome != 'ICE' && attr[q].biome != 'ICE') {
                 // Lake boundary
                 graphics.lineStyle(1, colors.LAKESHORE);
+              } else if (attr[p].water && attr[q].water) {
+                // Lake interior – we don't want to draw the rivers here
+              } else if (attr[edge].river != null && attr[edge].river != null) {
+                // River
+                graphics.lineStyle(Math.sqrt(attr[edge].river), colors.RIVER);
+              } else {
+                graphics.lineStyle(0, 0x000000, 0.1);
               }
               
               drawPathForwards(attr[edge].path0);
