@@ -29,6 +29,7 @@ package {
     static public var ISLAND_FACTOR:Number = 1.07;  // 1.0 means no small islands; 2.0 leads to a lot
     static public var NOISY_LINE_TRADEOFF:Number = 0.1;  // low: jagged vedge; high: jagged dedge
     static public var FRACTION_LAVA_FISSURES:Number = 0.2;  // 0 to 1, probability of fissure
+    static public var LAKE_THRESHOLD:Number = 0.3;  // 0 to 1, fraction of water corners for water polygon
     
     static public var displayColors:Object = {
       OCEAN: 0x555599,
@@ -238,6 +239,9 @@ package {
                 attr[p].water = (attr[p].water || 0) + 1;
               }
             }
+          if (attr[p].water && attr[p].water < attr[p].corners.length * LAKE_THRESHOLD) {
+            delete attr[p].water;
+          }
         }
       while (queue.length > 0) {
         p = queue.shift();
