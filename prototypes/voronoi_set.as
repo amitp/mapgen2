@@ -18,13 +18,17 @@ package {
   import com.nodename.Delaunay.Voronoi;
   import de.polygonal.math.PM_PRNG;
 
-  // TODO: add more points near coastlines and lakes, and remove ocean points
+  // TODO: add more points near coastlines (shrink beach areas). TODO:
+  // remove ocean points (maybe) (may speed up code). TODO: remove
+  // points that are too close to another point (voronoi edge is very
+  // straight and we can't make it noisy).
   
   public class voronoi_set extends Sprite {
     static public var NUM_POINTS:int = 2000;
     static public var SIZE:int = 600;
     static public var ISLAND_FACTOR:Number = 1.07;  // 1.0 means no small islands; 2.0 leads to a lot
     static public var NOISY_LINE_TRADEOFF:Number = 0.1;  // low: jagged vedge; high: jagged dedge
+    static public var FRACTION_LAVA_FISSURES:Number = 0.2;  // 0 to 1, probability of fissure
     
     static public var displayColors:Object = {
       OCEAN: 0x555599,
@@ -38,7 +42,7 @@ package {
       BARE: 0x666666,
       BEACH: 0xa09077,
       LAVA: 0xcc3333,
-      SNOW: 0xffffff, 
+      SNOW: 0xffffff,
       DESERT: 0xc9d29b,
       SAVANNAH: 0xaabb88,
       GRASSLANDS: 0x88aa55,
@@ -406,10 +410,9 @@ package {
       // TODO: render all edges after all polygons, or the polygon
       // drawing will draw over some of the edges.
       t = getTimer();
-      renderPolygons(graphics, points, displayColors, attr, true, null, null);
-      renderRivers(graphics, points, displayColors, voronoi, attr);
+      renderPolygons(graphics, displayColors, true, null, null);
+      renderEdges(graphics, displayColors);
       Debug.trace("TIME for rendering:", getTimer()-t);
-
 
       Debug.trace("MEMORY AFTER:", System.totalMemory, " TIME taken:", getTimer()-t0,"ms");
     }
@@ -684,8 +687,21 @@ package {
     }
 
 
-    // Render the polygons
-    public function renderPolygons(graphics:Graphics, points:Vector.<Point>, colors:Object, attr:Dictionary, texturedFills:Boolean, altitudeFunction:Function, moistureFunction:Function):void {
+    // Helper functions for rendering paths
+    private function drawPathForwards(graphics:Graphics, path:Vector.<Point>):void {
+      for (var i:int = 0; i < path.length; i++) {
+        graphics.lineTo(path[i].x, path[i].y);
+      }
+    }
+    private function drawPathBackwards(graphics:Graphics, path:Vector.<Point>):void {
+      for (var i:int = path.length-1; i >= 0; i--) {
+        graphics.lineTo(path[i].x, path[i].y);
+      }
+    }
+
+
+    // Render the interior of polygons
+    public function renderPolygons(graphics:Graphics, colors:Object, texturedFills:Boolean, altitudeFunction:Function, moistureFunction:Function):void {
       var p:Point, q:Point;
 
       // My Voronoi polygon rendering doesn't handle the boundary
@@ -695,16 +711,6 @@ package {
       graphics.endFill();
       
       for each (p in points) {
-          function drawPathForwards(path:Vector.<Point>):void {
-            for (var i:int = 0; i < path.length; i++) {
-              graphics.lineTo(path[i].x, path[i].y);
-            }
-          }
-          function drawPathBackwards(path:Vector.<Point>):void {
-            for (var i:int = path.length-1; i >= 0; i--) {
-              graphics.lineTo(path[i].x, path[i].y);
-            }
-          }
           for each (q in attr[p].neighbors) {
               var color:int = colors[attr[p].biome];
               if (altitudeFunction != null) {
@@ -738,6 +744,31 @@ package {
                 continue;
               }
               graphics.lineTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
+              
+              drawPathForwards(graphics, attr[edge].path0);
+              drawPathBackwards(graphics, attr[edge].path1);
+              graphics.lineTo(p.x, p.y);
+              graphics.endFill();
+            }
+        }
+    }
+
+
+    // Render the exterior of polygons: coastlines, lake shores,
+    // rivers, lava fissures. We draw all of these after the polygons
+    // so that polygons don't overwrite any edges.
+    public function renderEdges(graphics:Graphics, colors:Object):void {
+      var p:Point, q:Point;
+
+      for each (p in points) {
+          for each (q in attr[p].neighbors) {
+              var edge:Edge = lookupEdgeFromCenter(p, q);
+              if (attr[edge].path0 == null || attr[edge].path1 == null) {
+                // It's at the edge of the map, where we don't have
+                // the noisy edges computed. TODO: fill these in with
+                // non-noisy lines.
+                continue;
+              }
               if (attr[p].ocean != attr[q].ocean) {
                 // One side is ocean and the other side is land -- coastline
                 graphics.lineStyle(2, colors.COAST);
@@ -746,66 +777,56 @@ package {
                 graphics.lineStyle(1, colors.LAKESHORE);
               } else if (attr[p].water && attr[q].water) {
                 // Lake interior – we don't want to draw the rivers here
-              } else if (attr[edge].river != null && attr[edge].river != null) {
-                // River
+                continue;
+              } else if (attr[edge].river != null) {
+                // River edge
                 graphics.lineStyle(Math.sqrt(attr[edge].river), colors.RIVER);
+              } else if (!attr[edge].river && !attr[p].water && !attr[q].water
+                         && attr[p].elevation > 0.9 && attr[q].elevation > 0.9
+                         && attr[p].moisture < 0.5 && attr[q].moisture < 0.5
+                         && mapRandom.nextDouble() < FRACTION_LAVA_FISSURES) {
+                // Lava flow
+                graphics.lineStyle(1, colors.LAVA);
               } else {
-                graphics.lineStyle(0, 0x000000, 0.1);
+                // No edge
+                continue;
               }
               
-              drawPathForwards(attr[edge].path0);
-              drawPathBackwards(attr[edge].path1);
+              graphics.moveTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
+              drawPathForwards(graphics, attr[edge].path0);
+              drawPathBackwards(graphics, attr[edge].path1);
               graphics.lineStyle();
               graphics.lineTo(p.x, p.y);
-              graphics.endFill();
             }
+        }
+    }
+
+
+    private function DEBUG_drawPoints():void {
+      var p:Point, q:Point;
+      
+      for each (p in points) {
+          graphics.beginFill(attr[p].water? 0x0000ff : 0x00ff00);
+          graphics.drawRect(p.x-1,p.y-1,3,3);
+          graphics.endFill();
+        }
+      
+      for each (p in corners) {
+          if (attr[p].ocean) {
+            graphics.beginFill(0x000000);
+            graphics.drawCircle(p.x, p.y, 1.5);
+            graphics.endFill();
+          }
+        }
+
+      for each (q in attr[p].neighbors) {
+          graphics.lineStyle(1, attr[p].coast || attr[q].coast ? 0xffffff : 0x000000, 0.5);
+          graphics.moveTo(p.x, p.y);
+          graphics.lineTo(0.4*q.x+0.6*p.x, 0.4*q.y+0.6*p.y);
+          graphics.lineStyle();
         }
     }
     
-
-    // Render rivers. TODO: refactor to share code with buildNoisyEdges()
-    public function renderRivers(graphics:Graphics, points:Vector.<Point>, colors:Object, voronoi:Voronoi, attr:Dictionary):void {
-      var edges:Vector.<Edge> = voronoi.edges();
-      for (var i:int = 0; i < edges.length; i++) {
-        var dedge:LineSegment = edges[i].delaunayLine();
-        var vedge:LineSegment = edges[i].voronoiEdge();
-        if (vedge.p0 && vedge.p1 &&
-            (!attr[dedge.p0].ocean || !attr[dedge.p1].ocean)) {
-          var midpoint:Point = Point.interpolate(vedge.p0, vedge.p1, 0.5);
-          var alpha:Number = 0.03;
-
-          var f:Number = 0.6;  // low: jagged vedge; high: jagged dedge
-          var p:Point = Point.interpolate(vedge.p0, dedge.p0, f);
-          var q:Point = Point.interpolate(vedge.p0, dedge.p1, f);
-          var r:Point = Point.interpolate(vedge.p1, dedge.p0, f);
-          var s:Point = Point.interpolate(vedge.p1, dedge.p1, f);
-
-          // Water river
-          if ((attr[dedge.p0].downslope == dedge.p1 || attr[dedge.p1].downslope == dedge.p0)
-              && ((attr[dedge.p0].water || attr[dedge.p0].river)
-                  && (attr[dedge.p1].water || attr[dedge.p1].river))) {
-            if (attr[dedge.p0].river && !attr[dedge.p0].water) {
-              noisy_line.drawLineP(graphics, dedge.p0, p, midpoint, r, {color: colors.RIVER, width: Math.sqrt(attr[dedge.p0].river), minLength: 2});
-            }
-            if (attr[dedge.p1].river && !attr[dedge.p1].water) {
-              noisy_line.drawLineP(graphics, midpoint, q, dedge.p1, s, {color: colors.RIVER, width: Math.sqrt(attr[dedge.p1].river), minLength: 2});
-            }
-          }
-
-          // Lava flow
-          if (!attr[dedge.p0].water && !attr[dedge.p1].water
-              && !attr[dedge.p0].river && !attr[dedge.p1].river
-              && (attr[dedge.p0].elevation > 0.9 || attr[dedge.p1].elevation > 0.9)
-              && (attr[dedge.p0].moisture < 0.5 && attr[dedge.p1].moisture < 0.5)
-              && mapRandom.nextIntRange(0, 2) == 0) {
-            noisy_line.drawLineP(graphics, vedge.p0, p, midpoint, r, {color: colors.LAVA, width: 5*(attr[dedge.p0].elevation - 0.7), minLength: 1});
-            noisy_line.drawLineP(graphics, midpoint, q, vedge.p1, s, {color: colors.LAVA, width: 5*(attr[dedge.p1].elevation - 0.7), minLength: 1});
-          }
-          
-        }
-      }
-    }
-  
 
     // Build a noisy bitmap tile for a given color
     private var _textures:Array = [];
@@ -877,8 +898,9 @@ package {
       if (exportAltitude.length == 0) {
         var export:BitmapData = new BitmapData(2048, 2048);
         var exportGraphics:Shape = new Shape();
-        renderPolygons(exportGraphics.graphics, points, exportColors, attr, false, exportAltitudeFunction, exportMoistureFunction);
-        renderRivers(exportGraphics.graphics, points, exportColors, voronoi, attr);
+        renderPolygons(exportGraphics.graphics, exportColors, false, exportAltitudeFunction, exportMoistureFunction);
+        renderEdges(exportGraphics.graphics, exportColors);
+        
         var m:Matrix = new Matrix();
         m.scale(2048.0 / SIZE, 2048.0 / SIZE);
         stage.quality = 'low';
