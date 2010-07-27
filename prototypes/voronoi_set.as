@@ -438,19 +438,25 @@ package {
 
       // Workaround: the Voronoi library will allocate multiple corner
       // Point objects; we need to put them into the corners list only
-      // once, so that we can use these points in a Dictionary.
-      function findCorner(p:Point):Point {
-        // TODO: this is inefficient! Either sort the array or build
-        // buckets. It's safe to sort here because we're not iterating
-        // over the corners, but how often do we want to re-sort?
+      // once, so that we can use these points in a Dictionary.  To
+      // make lookup fast, we keep an array of points, bucketed by x
+      // value, and then we only have to look at other points in
+      // nearby buckets.
+      var _cornerMap:Array = [];
+      function makeCorner(p:Point):Point {
         if (p == null) return p;
-        for each (var q:Point in corners) {
-            var dx:Number = p.x - q.x;
-            var dy:Number = p.y - q.y;
-            if (dx*dx + dy*dy < 1e-6) {
-              return q;
+        for (var bucket:int = int(p.x)-1; bucket <= int(p.x)+1; bucket++) {
+          for each (var q:Point in _cornerMap[bucket]) {
+              var dx:Number = p.x - q.x;
+              var dy:Number = p.y - q.y;
+              if (dx*dx + dy*dy < 1e-6) {
+                return q;
+              }
             }
-          }
+        }
+        bucket = int(p.x);
+        if (!_cornerMap[bucket]) _cornerMap[bucket] = [];
+        _cornerMap[bucket].push(p);
         return p;
       }
     
@@ -474,8 +480,8 @@ package {
 
           // The Voronoi library generates multiple Point objects for
           // corners, and we need to have just one so we can index.
-          vedge.p0 = findCorner(vedge.p0);
-          vedge.p1 = findCorner(vedge.p1);
+          vedge.p0 = makeCorner(vedge.p0);
+          vedge.p1 = makeCorner(vedge.p1);
           
           // Build the graph skeleton for the corners
           for each (point in [vedge.p0, vedge.p1]) {
