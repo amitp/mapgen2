@@ -331,31 +331,33 @@ package {
 
       
       // Determine watersheds: for every corner, where does it flow
-      // out into the ocean?
+      // out into the ocean? Initially the watershed pointer points
+      // downslope one step.
       t = getTimer();
       for each (p in corners) {
           attr[p].watershed = p;
           if (!attr[p].ocean && !attr[p].coast) {
-          for each (q in attr[p].neighbors) {
-              if (attr[q].elevation < attr[attr[p].watershed].elevation && !attr[q].ocean) {
-                attr[p].watershed = q;
-              }
-            }
+            attr[p].watershed = attr[p].downslope;
           }
         }
-      for (i = 0; i < 1000; i++) {
+      // Follow the downslope pointers to the coast. Limit to 100
+      // iterations although most of the time it only takes 20.
+      for (i = 0; i < 100; i++) {
         var changed:Boolean = false;
         for each (p in corners) {
             if (!attr[p].ocean && !attr[p].coast && !attr[attr[p].watershed].coast) {
               q = attr[attr[p].downslope].watershed;
               if (!attr[q].ocean) attr[p].watershed = q;
-              q = attr[attr[p].watershed].watershed;
-              if (!attr[q].coast) attr[p].watershed = q;
               changed = true;
             }
           }
         if (!changed) break;
       }
+      // How big is each watershed?
+      for each (p in corners) {
+          q = attr[p].watershed;
+          attr[q].watershed_size = 1 + (attr[q].watershed_size || 0);
+        }
       Debug.trace("TIME for", i, "steps of watershed:", getTimer()-t);
 
       
@@ -861,8 +863,8 @@ package {
       for each (p in corners) {
           if (!attr[p].ocean) {
             q = attr[p].downslope;
-            graphics.lineStyle(2, attr[p].watershed == attr[q].watershed? 0x00ffff : 0xff00ff,
-                               0.3*(attr[attr[p].watershed].river || 1));
+            graphics.lineStyle(1.2, attr[p].watershed == attr[q].watershed? 0x00ffff : 0xff00ff,
+                               0.1*Math.sqrt(attr[attr[p].watershed].watershed_size || 1));
             graphics.moveTo(p.x, p.y);
             graphics.lineTo(q.x, q.y);
             graphics.lineStyle();
@@ -874,7 +876,7 @@ package {
               if (!attr[p].ocean && !attr[q].ocean && attr[p].watershed != attr[q].watershed && !attr[p].coast && !attr[q].coast) {
                 var edge:Edge = lookupEdgeFromCorner(p, q);
                 var midpoint:Point = Point.interpolate(attr[edge].v0, attr[edge].v1, 0.5);
-                graphics.lineStyle(2, 0x000000, 0.2*((attr[attr[p].watershed].river || 1) + (attr[attr[q].watershed].river || 1)));
+                graphics.lineStyle(2.5, 0x000000, 0.05*Math.sqrt((attr[attr[p].watershed].watershed_size || 1) + (attr[attr[q].watershed].watershed_size || 1)));
                 graphics.moveTo(attr[edge].d0.x, attr[edge].d0.y);
                 graphics.lineTo(midpoint.x, midpoint.y);
                 graphics.lineTo(attr[edge].d1.x, attr[edge].d1.y);
