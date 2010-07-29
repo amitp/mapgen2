@@ -49,7 +49,7 @@ package {
       GRASSLANDS: 0x88aa55,
       DRY_FOREST: 0x679459,
       RAIN_FOREST: 0x449955,
-      SWAMP: 0x44524c
+      SWAMP: 0x337744
     };
 
     public var islandRandom:PM_PRNG = new PM_PRNG(487);
@@ -362,7 +362,7 @@ package {
       queue = [];
       for each (p in corners) {
           if ((attr[p].water || attr[p].river) && !attr[p].ocean) {
-            attr[p].moisture = attr[p].river? Math.min(1.5, (0.2 * attr[p].river)) : 1.0;
+            attr[p].moisture = attr[p].river? Math.min(1.8, (0.2 * attr[p].river)) : 1.0;
             queue.push(p);
           } else {
             attr[p].moisture = 0.0;
@@ -565,8 +565,7 @@ package {
       // compute y(x), then set y(x) = y'(x), then solve for x in the
       // y'(x)=... equation. That gives us the corresponding elevation
       // in the target distribution.
-      for each (p in points) {
-          x = attr[p].elevation;
+      function remap(x:Number):Number {
           // We don't have the actual cumulative distribution computed
           // for all points. x falls into a histogram bucket from x0
           // to x1, and we can interpolate.
@@ -590,7 +589,11 @@ package {
           x = (1-f)*x0 + f*x1;
 
           if (x > maxElevation) x = maxElevation;
-          attr[p].elevation = x/maxElevation;
+          return x/maxElevation;
+      }
+      
+      for each (p in points) {
+          attr[p].elevation = remap(attr[p].elevation);
         }
     }
 
@@ -779,7 +782,7 @@ package {
               } else if ((attr[p].water > 0) != (attr[q].water > 0) && attr[p].biome != 'ICE' && attr[q].biome != 'ICE') {
                 // Lake boundary
                 graphics.lineStyle(1, colors.LAKESHORE);
-              } else if (attr[p].water && attr[q].water) {
+              } else if (attr[p].water || attr[q].water) {
                 // Lake interior – we don't want to draw the rivers here
                 continue;
               } else if (attr[edge].river != null) {
