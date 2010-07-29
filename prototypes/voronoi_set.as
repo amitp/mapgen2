@@ -330,6 +330,35 @@ package {
         }
 
       
+      // Determine watersheds: for every corner, where does it flow
+      // out into the ocean?
+      t = getTimer();
+      for each (p in corners) {
+          attr[p].watershed = p;
+          if (!attr[p].ocean && !attr[p].coast) {
+          for each (q in attr[p].neighbors) {
+              if (attr[q].elevation < attr[attr[p].watershed].elevation && !attr[q].ocean) {
+                attr[p].watershed = q;
+              }
+            }
+          }
+        }
+      for (i = 0; i < 1000; i++) {
+        var changed:Boolean = false;
+        for each (p in corners) {
+            if (!attr[p].ocean && !attr[p].coast && !attr[attr[p].watershed].coast) {
+              q = attr[attr[p].downslope].watershed;
+              if (!attr[q].ocean) attr[p].watershed = q;
+              q = attr[attr[p].watershed].watershed;
+              if (!attr[q].coast) attr[p].watershed = q;
+              changed = true;
+            }
+          }
+        if (!changed) break;
+      }
+      Debug.trace("TIME for", i, "steps of watershed:", getTimer()-t);
+
+      
       // Create rivers. Pick a random point, then move downslope. Mark
       // the *edges* as rivers instead of marking polygons or corners.
       t = getTimer();
@@ -811,26 +840,47 @@ package {
 
     private function DEBUG_drawPoints():void {
       var p:Point, q:Point;
-      
+
       for each (p in points) {
-          graphics.beginFill(attr[p].water? 0x0000ff : 0x00ff00);
-          graphics.drawRect(p.x-1,p.y-1,3,3);
+          graphics.beginFill(attr[p].water? 0x0000ff : 0x008800);
+          graphics.drawRect(p.x-1,p.y-1,2,2);
           graphics.endFill();
+        }
+
+      for each (p in corners) {
+          graphics.beginFill(attr[p].ocean? 0x0000ff : 0x008800);
+          graphics.drawCircle(p.x, p.y, 1.2);
+          graphics.endFill();
+        }
+    }
+
+
+    private function DEBUG_drawWatersheds():void {
+      var p:Point, q:Point;
+
+      for each (p in corners) {
+          if (!attr[p].ocean) {
+            q = attr[p].downslope;
+            graphics.lineStyle(2, attr[p].watershed == attr[q].watershed? 0x00ffff : 0xff00ff,
+                               0.3*(attr[attr[p].watershed].river || 1));
+            graphics.moveTo(p.x, p.y);
+            graphics.lineTo(q.x, q.y);
+            graphics.lineStyle();
+          }
         }
       
       for each (p in corners) {
-          if (attr[p].ocean) {
-            graphics.beginFill(0x000000);
-            graphics.drawCircle(p.x, p.y, 1.5);
-            graphics.endFill();
-          }
-        }
-
-      for each (q in attr[p].neighbors) {
-          graphics.lineStyle(1, attr[p].coast || attr[q].coast ? 0xffffff : 0x000000, 0.5);
-          graphics.moveTo(p.x, p.y);
-          graphics.lineTo(0.4*q.x+0.6*p.x, 0.4*q.y+0.6*p.y);
-          graphics.lineStyle();
+          for each (q in attr[p].neighbors) {
+              if (!attr[p].ocean && !attr[q].ocean && attr[p].watershed != attr[q].watershed && !attr[p].coast && !attr[q].coast) {
+                var edge:Edge = lookupEdgeFromCorner(p, q);
+                var midpoint:Point = Point.interpolate(attr[edge].v0, attr[edge].v1, 0.5);
+                graphics.lineStyle(2, 0x000000, 0.2*((attr[attr[p].watershed].river || 1) + (attr[attr[q].watershed].river || 1)));
+                graphics.moveTo(attr[edge].d0.x, attr[edge].d0.y);
+                graphics.lineTo(midpoint.x, midpoint.y);
+                graphics.lineTo(attr[edge].d1.x, attr[edge].d1.y);
+                graphics.lineStyle();
+              }
+            }
         }
     }
     
