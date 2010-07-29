@@ -51,7 +51,8 @@ package {
       GRASSLANDS: 0x88aa55,
       DRY_FOREST: 0x679459,
       RAIN_FOREST: 0x449955,
-      SWAMP: 0x337744
+      SWAMP: 0x337744,
+      ROAD: 0x664433
     };
 
     public var islandRandom:PM_PRNG = new PM_PRNG(487);
@@ -182,9 +183,9 @@ package {
       for each (p in corners) {
           if (!attr[p].ocean) landPoints.push(p);
         }
-      redistributeElevations(landPoints, attr);
-      redistributeElevations(landPoints, attr);
-      redistributeElevations(landPoints, attr);
+      for (i = 0; i < 10; i++) {
+        redistributeElevations(landPoints);
+      }
       Debug.trace("TIME for elevation rescaling:", getTimer()-t);
       
 
@@ -222,9 +223,16 @@ package {
       
       // Choose polygon biomes based on elevation, water, ocean
       t = getTimer();
-      assignTerrains(points, attr);
+      assignTerrains();
       Debug.trace("TIME for terrain assignment:", getTimer()-t);
 
+
+      // Mark areas that are easy vs hard so that we can draw a road
+      // dividing the areas
+      t = getTimer();
+      markEasyTerrain();
+      Debug.trace("TIME for easy/hard marking:", getTimer()-t);
+      
       
       // For all edges between polygons, build a noisy line path that
       // we can reuse while drawing both polygons connected to that
@@ -428,7 +436,7 @@ package {
     // compute the cumulative sum, then try to make that match the
     // desired cumulative sum. The desired cumulative sum is the
     // integral of the desired frequency distribution.
-    public function redistributeElevations(points:Vector.<Point>, attr:Dictionary):void {
+    public function redistributeElevations(points:Vector.<Point>):void {
       var maxElevation:int = 10;
       var M:Number = 1+maxElevation;
       var p:Point, i:int, x:Number, x0:Number, x1:Number, f:Number, y0:Number, y1:Number;
@@ -694,11 +702,39 @@ package {
         }
     }
 
+
+    // We want to mark lower and higher elevation differently so that
+    // we can draw an island-circling road that divides the areas.
+    public function markEasyTerrain():void {
+      // Start with all coastal polygons and mark them as 'easy'. Then
+      // any low-elevation land polygon connected to something 'easy'
+      // is also marked 'easy' (it's reachable without walking through
+      // a hard area).
+      var queue:Array = [];
+      var p:Point, q:Point;
+      var elevationThreshold:Number = 0.5;
+      for each (p in points) {
+          if (attr[p].coast) {
+            attr[p].easy = true;
+            queue.push(p);
+          }
+        }
+      while (queue.length > 0) {
+        p = queue.shift();
+        for each (q in attr[p].neighbors) {
+            if (!attr[q].ocean && !attr[q].easy && attr[q].elevation < elevationThreshold) {
+              attr[q].easy = true;
+              queue.push(q);
+            }
+          }
+      }
+    }
+      
     
     // Assign a terrain type to each polygon. If it has
     // ocean/coast/water, then that's the terrain type; otherwise it
     // depends on low/high elevation and low/medium/high moisture.
-    public function assignTerrains(points:Vector.<Point>, attr:Dictionary):void {
+    public function assignTerrains():void {
       for each (var p:Point in points) {
           var A:Object = attr[p];
           if (A.ocean) {
@@ -891,6 +927,8 @@ package {
                          && mapRandom.nextDouble() < FRACTION_LAVA_FISSURES) {
                 // Lava flow
                 graphics.lineStyle(1, colors.LAVA);
+              } else if (attr[p].easy != attr[q].easy) {
+                graphics.lineStyle(2.5, colors.ROAD);
               } else {
                 // No edge
                 continue;
@@ -994,7 +1032,8 @@ package {
     // altitude, moisture, and override code.
     static public var exportColors:Object = {
       /* override codes are 0:none, 0x10:river water, 0x20:lava, 0x30:snow,
-         0x40:ice, 0x50:ocean, 0x60:lake, 0x70:lake shore, 0x80:ocean shore */
+         0x40:ice, 0x50:ocean, 0x60:lake, 0x70:lake shore, 0x80:ocean shore,
+      0x90:road */
       // TODO: we only use the override code; remove the rest
       OCEAN: 0x00ff50,
       COAST: 0x00ff80,
@@ -1013,7 +1052,8 @@ package {
       GRASSLANDS: 0x994400,
       DRY_FOREST: 0x666600,
       RAIN_FOREST: 0x448800,
-      SWAMP: 0x33ff00
+      SWAMP: 0x33ff00,
+      ROAD: 0x770090
     };
 
     
