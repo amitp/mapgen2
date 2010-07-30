@@ -898,11 +898,27 @@ package {
     // rivers, lava fissures. We draw all of these after the polygons
     // so that polygons don't overwrite any edges.
     public function renderEdges(graphics:Graphics, colors:Object):void {
-      var p:Point, q:Point;
+      var p:Point, q:Point, edge:Edge;
 
+      // First draw the roads, because any other feature should draw
+      // over them. Also, roads don't use the noisy lines.
+      for each (p in points) {
+          if (!attr[p].ocean) {
+            for each (q in attr[p].neighbors) {
+                edge = lookupEdgeFromCenter(p, q);
+                if (attr[p].easy != attr[q].easy && attr[edge].river == null) {
+                  graphics.lineStyle(1.1, colors.ROAD);
+                  graphics.moveTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
+                  graphics.lineTo(attr[edge].path1[0].x, attr[edge].path1[0].y);
+                  graphics.lineStyle();
+                }
+              }
+          }
+        }
+          
       for each (p in points) {
           for each (q in attr[p].neighbors) {
-              var edge:Edge = lookupEdgeFromCenter(p, q);
+              edge = lookupEdgeFromCenter(p, q);
               if (attr[edge].path0 == null || attr[edge].path1 == null) {
                 // It's at the edge of the map, where we don't have
                 // the noisy edges computed. TODO: fill these in with
@@ -927,8 +943,6 @@ package {
                          && mapRandom.nextDouble() < FRACTION_LAVA_FISSURES) {
                 // Lava flow
                 graphics.lineStyle(1, colors.LAVA);
-              } else if (attr[p].easy != attr[q].easy) {
-                graphics.lineStyle(2.5, colors.ROAD);
               } else {
                 // No edge
                 continue;
@@ -938,7 +952,6 @@ package {
               drawPathForwards(graphics, attr[edge].path0);
               drawPathBackwards(graphics, attr[edge].path1);
               graphics.lineStyle();
-              graphics.lineTo(p.x, p.y);
             }
         }
     }
@@ -1053,7 +1066,7 @@ package {
       DRY_FOREST: 0x666600,
       RAIN_FOREST: 0x448800,
       SWAMP: 0x33ff00,
-      ROAD: 0x770090
+      ROAD: 0x775590
     };
 
     
