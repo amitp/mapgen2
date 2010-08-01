@@ -29,4 +29,13 @@ History:
 
 *   I started out with C++ code that used mountains, soil erosion, water flow, water erosion, water evaporation, volanoes, lava flow, and other physical processes to sculpt terrain expressed in a 2d array of tiles. However as described [in this blog post](http://simblob.blogspot.com/2010/06/teleological-vs-ontogenetic-map.html) I decided to abandon this approach.
 
-*   Since my initial approach failed, I am writing several small prototypes to figure out how to make rivers, coastlines, and mountains. These are the key features I want to support. I will then figure out how to combine them into a map.
+*   Since my initial approach failed, I wrote several small prototypes to figure out how to make rivers, coastlines, and mountains. These are the key features I want to support. I will then figure out how to combine them into a map.
+
+*   The voronoi_set.as prototype worked well and I continued adding to it (instead of converting to C++). It supports terrain types: ocean, land, beach, lake, forest, swamp, desert, ice, rocky, grassland, savannah. It has rivers and roads. I am undecided about converting to C++. It would be useful but it's a lot of work.
+
+** Notes
+
+*   http://en.wikipedia.org/wiki/Drainage_basin — watersheds are sometimes computed using voronoi; watersheds form boundaries between regions
+
+*   Compiling prototypes/voronoi_set.as requires my fork of as3delaunay: http://github.com/amitp/as3delaunay
+
