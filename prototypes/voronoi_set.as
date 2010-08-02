@@ -55,6 +55,18 @@ package {
       ROAD: 0x664433
     };
 
+    static public var elevationGradientColors:Object = {
+      OCEAN: 0x008800,
+      GRADIENT_LOW: 0x008800,
+      GRADIENT_HIGH: 0xffff00
+    };
+
+    static public var moistureGradientColors:Object = {
+      OCEAN: 0x4466ff,
+      GRADIENT_LOW: 0xbbaa33,
+      GRADIENT_HIGH: 0x4466ff
+    };
+      
     public var islandRandom:PM_PRNG = new PM_PRNG(487);
     public var mapRandom:PM_PRNG = new PM_PRNG(487);
 
@@ -64,11 +76,6 @@ package {
     public var corners:Vector.<Point>;
     public var attr:Dictionary;
 
-    // These are empty when we make a map, and filled in on export
-    public var exportAltitude:ByteArray = new ByteArray();
-    public var exportMoisture:ByteArray = new ByteArray();
-    public var exportOverride:ByteArray = new ByteArray();
-    
     public function voronoi_set() {
       stage.scaleMode = 'noScale';
       stage.align = 'TL';
@@ -118,11 +125,6 @@ package {
       if (!points) points = new Vector.<Point>();
       if (!corners) corners = new Vector.<Point>();
       
-      // Clear the previous export bitmap data
-      exportAltitude.clear();
-      exportMoisture.clear();
-      exportOverride.clear();
-
       System.gc();
       Debug.trace("MEMORY BEFORE:", System.totalMemory);
     }
@@ -248,7 +250,9 @@ package {
       // Render the polygons first, including polygon edges
       // (coastline, lakeshores), then other edges (rivers, lava).
       t = getTimer();
-      renderPolygons(graphics, displayColors, true, null, null);
+      renderPolygons(graphics, displayColors, true, null);
+      // renderPolygons(graphics, elevationGradientColors, false, 'elevation');
+      // renderPolygons(graphics, moistureGradientColors, false, 'moisture');
       renderEdges(graphics, displayColors);
       Debug.trace("TIME for rendering:", getTimer()-t);
 
@@ -844,8 +848,65 @@ package {
     }
 
 
+    // Helper function for color manipulation
+    private function interpolateColor(color1:uint, color2:uint, f:Number):uint {
+      var r:uint = uint((1-f)*(color1 >> 16) + f*(color2 >> 16));
+      var g:uint = uint((1-f)*((color1 >> 8) & 0xff) + f*((color2 >> 8) & 0xff));
+      var b:uint = uint((1-f)*(color1 & 0xff) + f*(color2 & 0xff));
+      if (r > 255) r = 255;
+      if (g > 255) g = 255;
+      if (b > 255) b = 255;
+      return (r << 16) | (g << 8) | b;
+    }
+
+    
+    // Helper function for drawing triangles with gradients. This
+    // function sets up the fill on the graphics object, and then
+    // calls fillFunction to draw the desired path.
+    private function drawGradientTriangle(graphics:Graphics,
+                                          v1:Vector3D, v2:Vector3D, v3:Vector3D,
+                                          color1:uint, color2:uint,
+                                          fillFunction:Function):void {
+      var m:Matrix = new Matrix();
+
+      // Center of triangle:
+      var V:Vector3D = v1.add(v2).add(v3);
+      V.scaleBy(1/3.0);
+
+      // Normal of the plane containing the triangle:
+      var N:Vector3D = v2.subtract(v1).crossProduct(v3.subtract(v1));
+      N.normalize();
+
+      // Gradient vector in x-y plane pointing in the direction of increasing z
+      var G:Vector3D = new Vector3D(-N.x/N.z, -N.y/N.z, 0);
+
+      // Center of the color gradient
+      var C:Vector3D = new Vector3D(V.x - G.x*((V.z-0.5)/G.length/G.length), V.y - G.y*((V.z-0.5)/G.length/G.length));
+
+      if (G.length < 1e-6) {
+        // If the gradient vector is small, there's not much
+        // difference in colors across this triangle. Use a plain
+        // fill, because the numeric accuracy of 1/G.length is not to
+        // be trusted.
+        graphics.beginFill(interpolateColor(color1, color2, V.z));
+      } else {
+        // The gradient box is weird to set up, so we let Flash set up
+        // a basic matrix and then we alter it:
+        m.createGradientBox(1, 1, 0, 0, 0);
+        m.translate(-0.5, -0.5);
+        m.scale((1/G.length), (1/G.length));
+        m.rotate(Math.atan2(G.y, G.x));
+        m.translate(C.x, C.y);
+        graphics.beginGradientFill(GradientType.LINEAR, [color1, color2],
+                                   [1, 1], [0x00, 0xff], m, SpreadMethod.PAD);
+      }
+      fillFunction();
+      graphics.endFill();
+    }
+    
+
     // Render the interior of polygons
-    public function renderPolygons(graphics:Graphics, colors:Object, texturedFills:Boolean, altitudeFunction:Function, moistureFunction:Function):void {
+    public function renderPolygons(graphics:Graphics, colors:Object, texturedFills:Boolean, gradientFillProperty:String):void {
       var p:Point, q:Point;
 
       // My Voronoi polygon rendering doesn't handle the boundary
@@ -857,42 +918,58 @@ package {
       for each (p in points) {
           for each (q in attr[p].neighbors) {
               var color:int = colors[attr[p].biome];
-              if (altitudeFunction != null) {
-                color = (altitudeFunction(p, q, attr) << 16) | (color & 0x00ffff);
+
+              function drawPath0():void {
+                graphics.moveTo(p.x, p.y);
+                graphics.lineTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
+                drawPathForwards(graphics, attr[edge].path0);
+                graphics.lineTo(p.x, p.y);
               }
-              if (moistureFunction != null) {
-                color = (moistureFunction(p, q, attr) << 8) | (color & 0xff00ff);
+
+              function drawPath1():void {
+                graphics.moveTo(p.x, p.y);
+                graphics.lineTo(attr[edge].path1[0].x, attr[edge].path1[0].y);
+                drawPathForwards(graphics, attr[edge].path1);
+                graphics.lineTo(p.x, p.y);
               }
-              /* HACK: draw moisture level
-              color = int(255*(0.667*attr[p].moisture+0.333*attr[q].elevation));
-              if (color > 255) color = 255;
-              color = color | 0x777700;
-*/
-              /* HACK: draw altitude level
-                 color = int(255*(0.667*attr[p].elevation+0.333*attr[q].elevation));
-                 if (color > 255) color = 255;
-                 color = (color << 8) | (color << 16) | 0x77;
-*/
-                   
-              if (texturedFills) {
-                graphics.beginBitmapFill(getBitmapTexture(color));
-              } else {
-                graphics.beginFill(color);
-              }
-              graphics.moveTo(p.x, p.y);
+
               var edge:Edge = lookupEdgeFromCenter(p, q);
               if (attr[edge].path0 == null || attr[edge].path1 == null) {
                 // It's at the edge of the map, where we don't have
-                // the noisy edges computed. TODO: fill these in with
-                // non-noisy lines.
+                // the noisy edges computed. TODO: figure out how to
+                // fill in these edges from the voronoi library.
                 continue;
               }
-              graphics.lineTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
-              
-              drawPathForwards(graphics, attr[edge].path0);
-              drawPathBackwards(graphics, attr[edge].path1);
-              graphics.lineTo(p.x, p.y);
-              graphics.endFill();
+
+              if (gradientFillProperty != null) {
+                var corner0:Point = attr[edge].v0;
+                var corner1:Point = attr[edge].v1;
+                
+                var midpoint:Point = Point.interpolate(corner0, corner1, 0.5);
+                var midpointAttr:Number = 0.5*(attr[p][gradientFillProperty]+attr[q][gradientFillProperty]);
+                drawGradientTriangle
+                  (graphics,
+                   new Vector3D(p.x, p.y, attr[p][gradientFillProperty]),
+                   new Vector3D(corner0.x, corner0.y, attr[corner0][gradientFillProperty]),
+                   new Vector3D(midpoint.x, midpoint.y, midpointAttr),
+                   colors.GRADIENT_LOW, colors.GRADIENT_HIGH, drawPath0);
+                drawGradientTriangle
+                  (graphics,
+                   new Vector3D(p.x, p.y, attr[p][gradientFillProperty]),
+                   new Vector3D(midpoint.x, midpoint.y, midpointAttr),
+                   new Vector3D(corner1.x, corner1.y, attr[corner1][gradientFillProperty]),
+                   colors.GRADIENT_LOW, colors.GRADIENT_HIGH, drawPath1);
+              } else if (texturedFills) {
+                graphics.beginBitmapFill(getBitmapTexture(color));
+                drawPath0();
+                drawPath1();
+                graphics.endFill();
+              } else {
+                graphics.beginFill(color);
+                drawPath0();
+                drawPath1();
+                graphics.endFill();
+              }
             }
         }
     }
@@ -1043,80 +1120,85 @@ package {
     //////////////////////////////////////////////////////////////////////
     // The following code is used to export the maps to disk
 
-    // We export altitude, moisture, and an override byte. We "paint"
-    // these three by using RGB values and the standard paint
-    // routines.  The exportColors have R, G, B, set to be the
-    // altitude, moisture, and override code.
-    static public var exportColors:Object = {
+    // We export elevation, moisture, and an override byte. Instead of
+    // rendering with RGB values, we render with bytes 0x00-0xff as
+    // colors, and then save these bytes in a ByteArray. For override
+    // codes, we turn off anti-aliasing.
+    static public var exportOverrideColors:Object = {
       /* override codes are 0:none, 0x10:river water, 0x20:lava, 0x30:snow,
          0x40:ice, 0x50:ocean, 0x60:lake, 0x70:lake shore, 0x80:ocean shore,
       0x90:road */
-      // TODO: we only use the override code; remove the rest
-      OCEAN: 0x00ff50,
-      COAST: 0x00ff80,
-      LAKE: 0x55ff60,
-      LAKESHORE: 0x55ff70,
-      RIVER: 0x55ff10,
-      MARSH: 0x33ff10,
-      ICE: 0xeeff40,
-      SCORCHED: 0xdd0000,
-      BEACH: 0x034400,
-      BARE: 0xee0000,
-      LAVA: 0xee0020,
-      SNOW: 0xeeff30,
-      DESERT: 0x990000,
-      SAVANNAH: 0x992200,
-      GRASSLANDS: 0x994400,
-      DRY_FOREST: 0x666600,
-      RAIN_FOREST: 0x448800,
-      SWAMP: 0x33ff00,
-      ROAD: 0x775590
+      OCEAN: 0x50,
+      COAST: 0x80,
+      LAKE: 0x60,
+      LAKESHORE: 0x70,
+      RIVER: 0x10,
+      MARSH: 0x10,
+      ICE: 0x40,
+      SCORCHED: 0x00,
+      BEACH: 0x00,
+      BARE: 0x00,
+      LAVA: 0x20,
+      SNOW: 0x30,
+      DESERT: 0x00,
+      SAVANNAH: 0x00,
+      GRASSLANDS: 0x00,
+      DRY_FOREST: 0x00,
+      RAIN_FOREST: 0x00,
+      SWAMP: 0x00,
+      ROAD: 0x90
     };
 
+    static public var exportElevationColors:Object = {
+      OCEAN: 0x00,
+      GRADIENT_LOW: 0x00,
+      GRADIENT_HIGH: 0xff
+    };
+
+    static public var exportMoistureColors:Object = {
+      OCEAN: 0xff,
+      GRADIENT_LOW: 0x00,
+      GRADIENT_HIGH: 0xff
+    };
+      
     
     // This function draws to a bitmap and copies that data into the
-    // three export byte arrays
-    public function fillExportBitmaps():void {
-      if (exportAltitude.length == 0) {
-        var export:BitmapData = new BitmapData(2048, 2048);
-        var exportGraphics:Shape = new Shape();
-        renderPolygons(exportGraphics.graphics, exportColors, false, exportAltitudeFunction, exportMoistureFunction);
-        renderEdges(exportGraphics.graphics, exportColors);
-        
-        var m:Matrix = new Matrix();
-        m.scale(2048.0 / SIZE, 2048.0 / SIZE);
-        stage.quality = 'low';
-        export.draw(exportGraphics, m);
-        stage.quality = 'best';
+    // three export byte arrays.  The layer parameter should be one of
+    // 'elevation', 'moisture', 'overrides'.
+    public function makeExport(layer:String):ByteArray {
+      var exportBitmap:BitmapData = new BitmapData(2048, 2048);
+      var exportGraphics:Shape = new Shape();
+      var exportData:ByteArray = new ByteArray();
+      
+      var m:Matrix = new Matrix();
+      m.scale(2048.0 / SIZE, 2048.0 / SIZE);
+
+      function saveBitmapToArray():void {
         for (var x:int = 0; x < 2048; x++) {
           for (var y:int = 0; y < 2048; y++) {
-            var color:uint = export.getPixel(x, y);
-            exportAltitude.writeByte((color >> 16) & 0xff);
-            exportMoisture.writeByte((color >> 8) & 0xff);
-            exportOverride.writeByte(color & 0xff);
+            exportData.writeByte(exportBitmap.getPixel(x, y) & 0xff);
           }
         }
       }
-    }
 
-    public function exportAltitudeFunction(p:Point, q:Point, attr:Dictionary):int {
-      var elevation:Number = (0.667 * attr[p].elevation + 0.333 * attr[q].elevation);
-      var c:int = 255 * elevation;
-      if (attr[p].biome == 'BEACH') c = 3;
-      else if (attr[p].ocean) c = 0;
-      else c += 6;
-      if (c < 0) c = 0;
-      if (c > 255) c = 255;
-      return c;
-    }
-
-
-    public function exportMoistureFunction(p:Point, q:Point, attr:Dictionary):int {
-      var moisture:Number = (0.667 * attr[p].moisture + 0.333 * attr[q].moisture);
-      var c:int = 255 * moisture;
-      if (c < 0) c = 0;
-      if (c > 255) c = 255;
-      return c;
+      if (layer == 'overrides') {
+        renderPolygons(exportGraphics.graphics, exportOverrideColors, false, null);
+        renderEdges(exportGraphics.graphics, exportOverrideColors);
+        
+        stage.quality = 'low';
+        exportBitmap.draw(exportGraphics, m);
+        stage.quality = 'best';
+        saveBitmapToArray();
+      } else if (layer == 'elevation') {
+        renderPolygons(exportGraphics.graphics, exportElevationColors, false, 'elevation');
+        exportBitmap.draw(exportGraphics, m);
+        saveBitmapToArray();
+      } else if (layer == 'moisture') {
+        renderPolygons(exportGraphics.graphics, exportMoistureColors, false, 'moisture');
+        exportBitmap.draw(exportGraphics, m);
+        saveBitmapToArray();
+      }
+      return exportData;
     }
 
 
@@ -1150,20 +1232,17 @@ package {
     public function addExportButtons():void {
       addChild(makeButton("export elevation", 650, 150,
                           function (e:Event):void {
-                            fillExportBitmaps();
-                            new FileReference().save(exportAltitude);
+                            new FileReference().save(makeExport('elevation'));
                             e.stopPropagation();
                           }));
       addChild(makeButton("export moisture", 650, 180,
                           function (e:Event):void {
-                            fillExportBitmaps();
-                            new FileReference().save(exportMoisture);
+                            new FileReference().save(makeExport('moisture'));
                             e.stopPropagation();
                           }));
       addChild(makeButton("export overrides", 650, 210,
                           function (e:Event):void {
-                            fillExportBitmaps();
-                            new FileReference().save(exportOverride);
+                            new FileReference().save(makeExport('overrides'));
                             e.stopPropagation();
                           }));
     }
