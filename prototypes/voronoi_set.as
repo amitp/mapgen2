@@ -671,6 +671,7 @@ package {
     public function calculateMoisture():void {
       var p:Point, q:Point, sumMoisture:Number;
       var queue:Array = [];
+      // Fresh water
       for each (p in corners) {
           if ((attr[p].water || attr[p].river) && !attr[p].ocean) {
             attr[p].moisture = attr[p].river? Math.min(1.8, (0.2 * attr[p].river)) : 1.0;
@@ -690,15 +691,18 @@ package {
             }
           }
       }
+      // Salt water
+      for each (p in corners) {
+          if (attr[p].ocean) attr[p].moisture = 1.0;
+        }
+      // Polygon moisture is the average of the moisture at corners
       for each (p in points) {
           sumMoisture = 0.0;
           for each (q in attr[p].corners) {
+              if (attr[q].moisture > 1.0) attr[q].moisture = 1.0;
               sumMoisture += attr[q].moisture;
             }
           attr[p].moisture = sumMoisture / attr[p].corners.length;
-        }
-      for each (p in corners) {
-          if (attr[p].ocean) attr[p].moisture = 0.8;
         }
     }
 
