@@ -70,6 +70,10 @@ package {
     public var islandRandom:PM_PRNG = new PM_PRNG(487);
     public var mapRandom:PM_PRNG = new PM_PRNG(487);
 
+    // This is the current map style. UI buttons change this, and it
+    // persists when you make a new map.
+    public var mapMode:String = 'biome';
+    
     // These store the graph data
     public var voronoi:Voronoi;
     public var points:Vector.<Point>;
@@ -129,13 +133,17 @@ package {
       Debug.trace("MEMORY BEFORE:", System.totalMemory);
     }
       
-      
-    public function go():void {
-      reset();
+
+    public function graphicsReset():void {
       graphics.clear();
       graphics.beginFill(0x555599);
       graphics.drawRect(-1000, -1000, 2000, 2000);
       graphics.endFill();
+    }
+
+    
+    public function go():void {
+      reset();
 
       var i:int, j:int, t:Number;
       var p:Point, q:Point, r:Point, s:Point;
@@ -168,8 +176,17 @@ package {
 
       // Determine the elevations and water at Voronoi corners.
       t = getTimer();
-      determineElevations();
+      assignCornerElevations();
       Debug.trace("TIME for elevation queue processing:", getTimer()-t);
+
+      
+      // Determine polygon type: ocean, coast, land, and assign
+      // elevation to land polygons based on corner elevations. We
+      // have to do this before rescaling because rescaling only
+      // applies to land corners.
+      t = getTimer();
+      assignOceanCoastAndLand();
+      Debug.trace("TIME for ocean/coast/land:", getTimer()-t);
 
       
       // Rescale elevations so that the highest is 1.0, and they're
@@ -183,21 +200,19 @@ package {
 
       var landPoints:Vector.<Point> = new Vector.<Point>();  // only non-ocean
       for each (p in corners) {
-          if (!attr[p].ocean) landPoints.push(p);
+          if (attr[p].ocean || attr[p].coast) {
+            attr[p].elevation = 0.0;
+          } else {
+            landPoints.push(p);
+          }
         }
       for (i = 0; i < 10; i++) {
         redistributeElevations(landPoints);
       }
+      assignPolygonElevations();
       Debug.trace("TIME for elevation rescaling:", getTimer()-t);
       
 
-      // Determine polygon type: ocean, coast, land, and assign
-      // elevation to land polygons based on corner elevations.
-      t = getTimer();
-      assignOceanCoastAndLand();
-      Debug.trace("TIME for ocean/coast/land:", getTimer()-t);
-
-      
       // Determine downslope paths.
       t = getTimer();
       calculateDownslopes();
@@ -250,10 +265,7 @@ package {
       // Render the polygons first, including polygon edges
       // (coastline, lakeshores), then other edges (rivers, lava).
       t = getTimer();
-      renderPolygons(graphics, displayColors, true, null);
-      // renderPolygons(graphics, elevationGradientColors, false, 'elevation');
-      // renderPolygons(graphics, moistureGradientColors, false, 'moisture');
-      renderEdges(graphics, displayColors);
+      drawMap();
       Debug.trace("TIME for rendering:", getTimer()-t);
 
       Debug.trace("MEMORY AFTER:", System.totalMemory, " TIME taken:", getTimer()-t0,"ms");
@@ -391,7 +403,7 @@ package {
     // up flowing out through them. Also by construction, lakes
     // often end up on river paths because they don't raise the
     // elevation as much as other terrain does.
-    public function determineElevations():void {
+    public function assignCornerElevations():void {
       var p:Point, q:Point;
       var queue:Array = [];
       
@@ -441,7 +453,7 @@ package {
     // desired cumulative sum. The desired cumulative sum is the
     // integral of the desired frequency distribution.
     public function redistributeElevations(points:Vector.<Point>):void {
-      var maxElevation:int = 10;
+      var maxElevation:int = 20;
       var M:Number = 1+maxElevation;
       var p:Point, i:int, x:Number, x0:Number, x1:Number, f:Number, y0:Number, y1:Number;
       var histogram:Array = [];
@@ -508,8 +520,7 @@ package {
     }
 
 
-    // Determine polygon type: ocean, coast, land, and assign
-    // elevation to land polygons based on corner elevations.
+    // Determine polygon and corner types: ocean, coast, land.
     public function assignOceanCoastAndLand():void {
       // Compute polygon attributes 'ocean' and 'water' based on the
       // corner attributes. Count the water corners per
@@ -518,7 +529,7 @@ package {
       // in the second pass, mark any water-containing polygon
       // connected an ocean as ocean.
       var queue:Array = [];
-      var p:Point, q:Point, sumElevation:Number;
+      var p:Point, q:Point;
       
       for each (p in points) {
           for each (q in attr[p].corners) {
@@ -575,8 +586,12 @@ package {
           attr[p].coast = (numOcean > 0) && (numLand > 0);
           attr[p].water = (numLand != attr[p].corners.length) && !attr[p].coast;
         }
-      
-      // Compute polygon elevations as the average of the corner elevations
+    }
+  
+
+    // Polygon elevations are the average of the elevations of their corners.
+    public function assignPolygonElevations():void {
+      var p:Point, q:Point, sumElevation:Number;
       for each (p in points) {
           sumElevation = 0.0;
           for each (q in attr[p].corners) {
@@ -585,7 +600,7 @@ package {
           attr[p].elevation = sumElevation / attr[p].corners.length;
         }
     }
-  
+
     
     // Calculate downslope pointers.  At every point, we point to the
     // point downstream from it, or to itself.  This is used for
@@ -720,7 +735,7 @@ package {
       // a hard area).
       var queue:Array = [];
       var p:Point, q:Point;
-      var elevationThreshold:Number = 0.5;
+      var elevationThreshold:Number = 0.37 / 2;  /* 0.37 is when things start getting hard but we want the road to be halfway through that zone */
       for each (p in points) {
           if (attr[p].coast) {
             attr[p].easy = true;
@@ -750,14 +765,14 @@ package {
           } else if (A.water) {
             A.biome = 'LAKE';
             if (A.elevation < 0.1) A.biome = 'MARSH';
-            if (A.elevation > 0.7) A.biome = 'ICE';
+            if (A.elevation > 0.85) A.biome = 'ICE';
           } else if (A.coast) {
             A.biome = 'BEACH';
           } else if (A.elevation > 0.85) {
             if (A.moisture > 0.5) A.biome = 'SNOW';
             else if (A.moisture > 0.3) A.biome = 'BARE'; 
             else A.biome = 'SCORCHED';
-          } else if (A.elevation > 0.2) {
+          } else if (A.elevation > 0.3) {
             if (A.moisture > 0.8) A.biome = 'DRY_FOREST';
             else if (A.moisture > 0.5) A.biome = 'GRASSLANDS';
             else if (A.moisture > 0.235) A.biome = 'SAVANNAH';
@@ -790,7 +805,8 @@ package {
                 var s:Point = Point.interpolate(attr[edge].v1, attr[edge].d1, f);
 
                 var minLength:int = 4;
-                if (attr[attr[edge].d0].water != attr[attr[edge].d1].water) minLength = 2;
+                if (attr[attr[edge].d0].water != attr[attr[edge].d1].water) minLength = 3;
+                if (attr[attr[edge].d0].biome == attr[attr[edge].d1].biome) minLength = 8;
                 if (attr[attr[edge].d0].ocean && attr[attr[edge].d1].ocean) minLength = 100;
                 
                 attr[edge].path0 = noisy_line.buildLineSegments(attr[edge].v0, p, midpoint, q, minLength);
@@ -905,6 +921,21 @@ package {
     }
     
 
+    // Draw the map in the current map mode
+    public function drawMap():void {
+      graphicsReset();
+      if (mapMode == 'biome') {
+        renderPolygons(graphics, displayColors, true, null);
+      } else if (mapMode == 'elevation') {
+        renderPolygons(graphics, elevationGradientColors, false, 'elevation');
+      } else if (mapMode == 'moisture') {
+        renderPolygons(graphics, moistureGradientColors, false, 'moisture');
+      }
+
+      renderEdges(graphics, displayColors);
+    }
+
+    
     // Render the interior of polygons
     public function renderPolygons(graphics:Graphics, colors:Object, texturedFills:Boolean, gradientFillProperty:String):void {
       var p:Point, q:Point;
@@ -942,11 +973,16 @@ package {
               }
 
               if (gradientFillProperty != null) {
+                // We'll draw two triangles: center - corner0 -
+                // midpoint and center - midpoint - corner1.
                 var corner0:Point = attr[edge].v0;
                 var corner1:Point = attr[edge].v1;
-                
+
+                // We pick the midpoint elevation/moisture between
+                // corners instead of between polygon centers because
+                // the resulting gradients tend to be smoother.
                 var midpoint:Point = Point.interpolate(corner0, corner1, 0.5);
-                var midpointAttr:Number = 0.5*(attr[p][gradientFillProperty]+attr[q][gradientFillProperty]);
+                var midpointAttr:Number = 0.5*(attr[corner0][gradientFillProperty]+attr[corner1][gradientFillProperty]);
                 drawGradientTriangle
                   (graphics,
                    new Vector3D(p.x, p.y, attr[p][gradientFillProperty]),
@@ -1019,7 +1055,7 @@ package {
                 // River edge
                 graphics.lineStyle(Math.sqrt(attr[edge].river), colors.RIVER);
               } else if (!attr[edge].river && !attr[p].water && !attr[q].water
-                         && attr[p].elevation > 0.9 && attr[q].elevation > 0.9
+                         && attr[p].elevation > 0.85 && attr[q].elevation > 0.85
                          && attr[p].moisture < 0.5 && attr[q].moisture < 0.5
                          && mapRandom.nextDouble() < FRACTION_LAVA_FISSURES) {
                 // Lava flow
@@ -1226,23 +1262,39 @@ package {
                           function (e:Event):void {
                             go();
                           }));
+      
+      addChild(makeButton("see biomes", 650, 150,
+                          function (e:Event):void {
+                            mapMode = 'biome';
+                            drawMap();
+                          }));
+      addChild(makeButton("see elevation", 650, 180,
+                          function (e:Event):void {
+                            mapMode = 'elevation';
+                            drawMap();
+                          }));
+      addChild(makeButton("see moisture", 650, 210,
+                          function (e:Event):void {
+                            mapMode = 'moisture';
+                            drawMap();
+                          }));
     }
 
                
     public function addExportButtons():void {
-      addChild(makeButton("export elevation", 650, 150,
+      addChild(makeButton("export elevation", 650, 270,
                           function (e:Event):void {
-                            new FileReference().save(makeExport('elevation'));
+                            new FileReference().save(makeExport('elevation'), 'elevation.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export moisture", 650, 180,
+      addChild(makeButton("export moisture", 650, 300,
                           function (e:Event):void {
-                            new FileReference().save(makeExport('moisture'));
+                            new FileReference().save(makeExport('moisture'), 'moisture.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export overrides", 650, 210,
+      addChild(makeButton("export overrides", 650, 330,
                           function (e:Event):void {
-                            new FileReference().save(makeExport('overrides'));
+                            new FileReference().save(makeExport('overrides'), 'overrides.data');
                             e.stopPropagation();
                           }));
     }
