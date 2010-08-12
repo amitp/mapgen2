@@ -925,11 +925,11 @@ package {
     public function drawMap():void {
       graphicsReset();
       if (mapMode == 'biome') {
-        renderPolygons(graphics, displayColors, true, null);
+        renderPolygons(graphics, displayColors, true, null, colorWithSmoothColors);
       } else if (mapMode == 'elevation') {
-        renderPolygons(graphics, elevationGradientColors, false, 'elevation');
+        renderPolygons(graphics, elevationGradientColors, false, 'elevation', null);
       } else if (mapMode == 'moisture') {
-        renderPolygons(graphics, moistureGradientColors, false, 'moisture');
+        renderPolygons(graphics, moistureGradientColors, false, 'moisture', null);
       }
 
       renderEdges(graphics, displayColors);
@@ -937,7 +937,7 @@ package {
 
     
     // Render the interior of polygons
-    public function renderPolygons(graphics:Graphics, colors:Object, texturedFills:Boolean, gradientFillProperty:String):void {
+    public function renderPolygons(graphics:Graphics, colors:Object, texturedFills:Boolean, gradientFillProperty:String, colorOverrideFunction:Function):void {
       var p:Point, q:Point;
 
       // My Voronoi polygon rendering doesn't handle the boundary
@@ -949,7 +949,10 @@ package {
       for each (p in points) {
           for each (q in attr[p].neighbors) {
               var color:int = colors[attr[p].biome];
-
+              if (colorOverrideFunction != null) {
+                color = colorOverrideFunction(color, p, q);
+              }
+              
               function drawPath0():void {
                 graphics.moveTo(p.x, p.y);
                 graphics.lineTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
@@ -1153,6 +1156,31 @@ package {
     }
 
 
+    public function colorWithSmoothColors(color:int, p:Point, q:Point):int {
+      var biome:String = attr[p].biome;
+              
+      if (biome != 'ICE' && biome != 'OCEAN' && biome != 'LAKE'
+          && biome != 'SCORCHED' && biome != 'BARE' && biome != 'SNOW') {
+        function smoothColor(elevation:Number, moisture:Number):int {
+          elevation = Math.round(elevation*10)/10;
+          moisture = Math.round(moisture*10)/10;
+          return interpolateColor
+            (interpolateColor(0xb19772, 0xcfb78b, elevation),
+             interpolateColor(0x1d8e39, 0x97cb1b, elevation),
+             moisture);
+        }
+        color = interpolateColor(smoothColor(attr[p].elevation, attr[p].moisture),
+                                 smoothColor(attr[q].elevation, attr[q].moisture),
+                                 0.5);
+        if (biome == 'BEACH') {
+          color = interpolateColor(color, displayColors.BEACH, 0.7);
+        }
+      }
+      
+      return color;
+    }
+
+    
     //////////////////////////////////////////////////////////////////////
     // The following code is used to export the maps to disk
 
@@ -1218,7 +1246,7 @@ package {
       }
 
       if (layer == 'overrides') {
-        renderPolygons(exportGraphics.graphics, exportOverrideColors, false, null);
+        renderPolygons(exportGraphics.graphics, exportOverrideColors, false, null, null);
         renderEdges(exportGraphics.graphics, exportOverrideColors);
         
         stage.quality = 'low';
@@ -1226,11 +1254,11 @@ package {
         stage.quality = 'best';
         saveBitmapToArray();
       } else if (layer == 'elevation') {
-        renderPolygons(exportGraphics.graphics, exportElevationColors, false, 'elevation');
+        renderPolygons(exportGraphics.graphics, exportElevationColors, false, 'elevation', null);
         exportBitmap.draw(exportGraphics, m);
         saveBitmapToArray();
       } else if (layer == 'moisture') {
-        renderPolygons(exportGraphics.graphics, exportMoistureColors, false, 'moisture');
+        renderPolygons(exportGraphics.graphics, exportMoistureColors, false, 'moisture', null);
         exportBitmap.draw(exportGraphics, m);
         saveBitmapToArray();
       }
