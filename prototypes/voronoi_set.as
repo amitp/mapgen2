@@ -730,56 +730,52 @@ package {
     // We want to mark different elevation zones so that we can draw
     // island-circling roads that divide the areas.
     public function createRoads():void {
-      // Start with all coastal polygons and mark them as 'easy'. Then
-      // any low-elevation land polygon connected to something 'easy'
-      // is also marked 'easy' (it's reachable without walking through
-      // a hard area).
+      // Oceans and coastal polygons are the lowest contour zone
+      // (1). Anything connected to contour level K, if it's below
+      // elevation threshold K, or if it's water, gets contour level
+      // K.  (2) Anything not assigned a contour level, and connected
+      // to contour level K, gets contour level K+1.
       var queue:Array = [];
-      var p:Point, q:Point, edge:Edge;
-      for each (var elevationThreshold:Number in [0.05, 0.35, 0.65]) {
-          for each (p in points) {
-              if (attr[p].coast || attr[p].ocean) {
-                attr[p].contour = 1;
-                queue.push(p);
-              } else if (attr[p].contour) {
-                delete attr[p].contour;
-              }
-            }
-          while (queue.length > 0) {
-            p = queue.shift();
-            for each (q in attr[p].neighbors) {
-                if (!attr[q].contour
-                    && (attr[q].elevation < elevationThreshold || attr[q].water)) {
-                  // NOTE: extend the contour line past bodies of
-                  // water so that roads don't terminate inside lakes.
-                  attr[q].contour = 1;
-                  queue.push(q);
-                }
-              }
-          }
+      var p:Point, q:Point, edge:Edge, newLevel:int;
+      var elevationThresholds:Array = [0, 0.05, 0.35, 0.65];
 
-          // Any easy polygon has all easy corners. Hard corners are the
-          // ones that touch no easy polygons.
-          for each (q in corners) {
-              if (attr[q].contour) {
-                delete attr[q].contour;
-              }
+      for each (p in points) {
+          if (attr[p].coast || attr[p].ocean) {
+            attr[p].contour = 1;
+            queue.push(p);
+          }
+        }
+      while (queue.length > 0) {
+        p = queue.shift();
+        for each (q in attr[p].neighbors) {
+            newLevel = attr[p].contour || 0;
+            if (attr[q].elevation > elevationThresholds[newLevel] && !attr[q].water) {
+              // NOTE: extend the contour line past bodies of
+              // water so that roads don't terminate inside lakes.
+              newLevel += 1;
             }
-          for each (p in points) {
-              if (attr[p].contour) {
-                for each (q in attr[p].corners) {
-                    attr[q].contour = attr[p].contour;
-                  }
-              }
+            if (newLevel < (attr[q].contour || 999)) {
+              attr[q].contour = newLevel;
+              queue.push(q);
             }
-      
-          for each (p in points) {
-              for each (edge in attr[p].edges) {
-                  if (attr[edge].v0 && attr[edge].v1 && attr[attr[edge].v0].contour != attr[attr[edge].v1].contour) {
-                    attr[edge].road = true;
-                    attr[p].road_connections = (attr[p].road_connections || 0) + 1;
-                  }
-                }
+          }
+      }
+
+      // A corner's contour level is the MIN of its polygons
+      for each (p in points) {
+          for each (q in attr[p].corners) {
+              attr[q].contour = Math.min(attr[q].contour || 999, attr[p].contour || 999);
+            }
+        }
+
+      // Roads go between polygons that have different contour levels
+      for each (p in points) {
+          for each (edge in attr[p].edges) {
+              if (attr[edge].v0 && attr[edge].v1
+                  && attr[attr[edge].v0].contour != attr[attr[edge].v1].contour) {
+                attr[edge].road = true;
+                attr[p].road_connections = (attr[p].road_connections || 0) + 1;
+              }
             }
         }
     }
