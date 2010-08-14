@@ -244,11 +244,11 @@ package {
       Debug.trace("TIME for terrain assignment:", getTimer()-t);
 
 
-      // Mark areas that are easy vs hard so that we can draw a road
-      // dividing the areas
+      // Mark areas in each contour area and place roads along the
+      // contour lines.
       t = getTimer();
-      markEasyTerrain();
-      Debug.trace("TIME for easy/hard marking:", getTimer()-t);
+      createRoads();
+      Debug.trace("TIME for roads:", getTimer()-t);
       
       
       // For all edges between polygons, build a noisy line path that
@@ -727,31 +727,61 @@ package {
     }
 
 
-    // We want to mark lower and higher elevation differently so that
-    // we can draw an island-circling road that divides the areas.
-    public function markEasyTerrain():void {
+    // We want to mark different elevation zones so that we can draw
+    // island-circling roads that divide the areas.
+    public function createRoads():void {
       // Start with all coastal polygons and mark them as 'easy'. Then
       // any low-elevation land polygon connected to something 'easy'
       // is also marked 'easy' (it's reachable without walking through
       // a hard area).
       var queue:Array = [];
-      var p:Point, q:Point;
-      var elevationThreshold:Number = 0.37 / 2;  /* 0.37 is when things start getting hard but we want the road to be halfway through that zone */
-      for each (p in points) {
-          if (attr[p].coast) {
-            attr[p].easy = true;
-            queue.push(p);
-          }
-        }
-      while (queue.length > 0) {
-        p = queue.shift();
-        for each (q in attr[p].neighbors) {
-            if (!attr[q].ocean && !attr[q].easy && attr[q].elevation < elevationThreshold) {
-              attr[q].easy = true;
-              queue.push(q);
+      var p:Point, q:Point, edge:Edge;
+      for each (var elevationThreshold:Number in [0.05, 0.35, 0.65]) {
+          for each (p in points) {
+              if (attr[p].coast || attr[p].ocean) {
+                attr[p].contour = 1;
+                queue.push(p);
+              } else if (attr[p].contour) {
+                delete attr[p].contour;
+              }
             }
+          while (queue.length > 0) {
+            p = queue.shift();
+            for each (q in attr[p].neighbors) {
+                if (!attr[q].contour
+                    && (attr[q].elevation < elevationThreshold || attr[q].water)) {
+                  // NOTE: extend the contour line past bodies of
+                  // water so that roads don't terminate inside lakes.
+                  attr[q].contour = 1;
+                  queue.push(q);
+                }
+              }
           }
-      }
+
+          // Any easy polygon has all easy corners. Hard corners are the
+          // ones that touch no easy polygons.
+          for each (q in corners) {
+              if (attr[q].contour) {
+                delete attr[q].contour;
+              }
+            }
+          for each (p in points) {
+              if (attr[p].contour) {
+                for each (q in attr[p].corners) {
+                    attr[q].contour = attr[p].contour;
+                  }
+              }
+            }
+      
+          for each (p in points) {
+              for each (edge in attr[p].edges) {
+                  if (attr[edge].v0 && attr[edge].v1 && attr[attr[edge].v0].contour != attr[attr[edge].v1].contour) {
+                    attr[edge].road = true;
+                    attr[p].road_connections = (attr[p].road_connections || 0) + 1;
+                  }
+                }
+            }
+        }
     }
       
     
@@ -932,6 +962,7 @@ package {
         renderPolygons(graphics, moistureGradientColors, false, 'moisture', null);
       }
 
+      renderRoads(graphics, displayColors);
       renderEdges(graphics, displayColors);
     }
 
@@ -952,7 +983,7 @@ package {
               if (colorOverrideFunction != null) {
                 color = colorOverrideFunction(color, p, q);
               }
-              
+
               function drawPath0():void {
                 graphics.moveTo(p.x, p.y);
                 graphics.lineTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
@@ -1014,28 +1045,85 @@ package {
     }
 
 
+    // Render roads. We draw these before polygon edges, so that rivers overwrite roads.
+    public function renderRoads(graphics:Graphics, colors:Object):void {
+      // First draw the roads, because any other feature should draw
+      // over them. Also, roads don't use the noisy lines.
+      var p:Point, q:Point, A:Point, B:Point, C:Point;
+      var i:int, j:int, d:Number, edge1:Edge, edge2:Edge, edges:Vector.<Edge>;
+
+      // Helper function: find the normal vector across edge 'e' and
+      // make sure to point it in a direction towards 'c'.
+      function normalTowards(e:Edge, c:Point, len:Number):Point {
+        // Rotate the v0-->v1 vector by 90 degrees:
+        var n:Point = new Point(-(attr[e].v1.y - attr[e].v0.y),
+                                attr[e].v1.x - attr[e].v0.x);
+        // Flip it around it if doesn't point towards c
+        var d:Point = c.subtract(attr[e].midpoint);
+        if (n.x * d.x + n.y * d.y < 0) {
+          n.x = -n.x;
+          n.y = -n.y;
+        }
+        n.normalize(len);
+        return n;
+      }
+      
+      for each (p in points) {
+          if (attr[p].road_connections == 2) {
+            // Regular road: draw a spline from one edge to the other.
+            edges = attr[p].edges;
+            for (i = 0; i < edges.length; i++) {
+              edge1 = edges[i];
+              if (attr[edge1].road) {
+                for (j = i+1; j < edges.length; j++) {
+                  edge2 = edges[j];
+                  if (attr[edge2].road) {
+                    // The spline connects the midpoints of the edges
+                    // and at right angles to them. In between we
+                    // generate two control points A and B and one
+                    // additional vertex C.  This usually works but
+                    // not always. TODO: compute d as the distance
+                    // from the center to the line instead of center
+                    // to the midpoint.
+                    d = 0.4*Math.min
+                      (attr[edge1].midpoint.subtract(p).length,
+                       attr[edge2].midpoint.subtract(p).length);
+                    A = normalTowards(edge1, p, d).add(attr[edge1].midpoint);
+                    B = normalTowards(edge2, p, d).add(attr[edge2].midpoint);
+                    C = Point.interpolate(A, B, 0.5);
+                    graphics.lineStyle(1.1, colors.ROAD);
+                    graphics.moveTo(attr[edge1].midpoint.x, attr[edge1].midpoint.y);
+                    graphics.curveTo(A.x, A.y, C.x, C.y);
+                    graphics.curveTo(B.x, B.y, attr[edge2].midpoint.x, attr[edge2].midpoint.y);
+                    graphics.lineStyle();
+                  }
+                }
+              }
+            }
+          }
+          if (attr[p].road_connections && attr[p].road_connections != 2) {
+            // Intersection: draw a road spline from each edge to the center
+            for each (edge1 in attr[p].edges) {
+                if (attr[edge1].road) {
+                  d = 0.25*attr[edge1].midpoint.subtract(p).length;
+                  A = normalTowards(edge1, p, d).add(attr[edge1].midpoint);
+                  graphics.lineStyle(1.4, colors.ROAD);
+                  graphics.moveTo(attr[edge1].midpoint.x, attr[edge1].midpoint.y);
+                  graphics.curveTo(A.x, A.y, p.x, p.y);
+                  graphics.lineStyle();
+                }
+              }
+          }
+        }
+    }
+
+    
     // Render the exterior of polygons: coastlines, lake shores,
     // rivers, lava fissures. We draw all of these after the polygons
     // so that polygons don't overwrite any edges.
     public function renderEdges(graphics:Graphics, colors:Object):void {
       var p:Point, q:Point, edge:Edge;
 
-      // First draw the roads, because any other feature should draw
-      // over them. Also, roads don't use the noisy lines.
-      for each (p in points) {
-          if (!attr[p].ocean) {
-            for each (q in attr[p].neighbors) {
-                edge = lookupEdgeFromCenter(p, q);
-                if (attr[p].easy != attr[q].easy && attr[edge].river == null) {
-                  graphics.lineStyle(1.1, colors.ROAD);
-                  graphics.moveTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
-                  graphics.lineTo(attr[edge].path1[0].x, attr[edge].path1[0].y);
-                  graphics.lineStyle();
-                }
-              }
-          }
-        }
-          
       for each (p in points) {
           for each (q in attr[p].neighbors) {
               edge = lookupEdgeFromCenter(p, q);
@@ -1249,8 +1337,9 @@ package {
 
       if (layer == 'overrides') {
         renderPolygons(exportGraphics.graphics, exportOverrideColors, false, null, null);
+        renderRoads(exportGraphics.graphics, exportOverrideColors);
         renderEdges(exportGraphics.graphics, exportOverrideColors);
-        
+
         stage.quality = 'low';
         exportBitmap.draw(exportGraphics, m);
         stage.quality = 'best';
