@@ -952,15 +952,19 @@ package {
       graphicsReset();
       if (mapMode == 'biome') {
         renderPolygons(graphics, displayColors, true, null, null);
+      } else if (mapMode == 'slopes') {
+        renderPolygons(graphics, displayColors, true, null, colorWithSlope);
       } else if (mapMode == 'smooth') {
-        renderPolygons(graphics, displayColors, true, null, colorWithSmoothColors);
+        renderPolygons(graphics, displayColors, false, null, colorWithSmoothColors);
       } else if (mapMode == 'elevation') {
         renderPolygons(graphics, elevationGradientColors, false, 'elevation', null);
       } else if (mapMode == 'moisture') {
         renderPolygons(graphics, moistureGradientColors, false, 'moisture', null);
       }
 
-      renderRoads(graphics, displayColors);
+      if (mapMode != 'slopes' && mapMode != 'moisture') {
+        renderRoads(graphics, displayColors);
+      }
       renderEdges(graphics, displayColors);
     }
 
@@ -977,9 +981,10 @@ package {
       
       for each (p in points) {
           for each (q in attr[p].neighbors) {
+              var edge:Edge = lookupEdgeFromCenter(p, q);
               var color:int = colors[attr[p].biome];
               if (colorOverrideFunction != null) {
-                color = colorOverrideFunction(color, p, q);
+                color = colorOverrideFunction(color, p, q, edge);
               }
 
               function drawPath0():void {
@@ -996,7 +1001,6 @@ package {
                 graphics.lineTo(p.x, p.y);
               }
 
-              var edge:Edge = lookupEdgeFromCenter(p, q);
               if (attr[edge].path0 == null || attr[edge].path1 == null) {
                 // It's at the edge of the map, where we don't have
                 // the noisy edges computed. TODO: figure out how to
@@ -1241,14 +1245,37 @@ package {
     }
 
 
-    public function colorWithSmoothColors(color:int, p:Point, q:Point):int {
+    private var lightVector:Vector3D = new Vector3D(-1, -1, 0);
+    public function colorWithSlope(color:int, p:Point, q:Point, edge:Edge):int {
+      var r:Point = attr[edge].v0;
+      var s:Point = attr[edge].v1;
+      if (!r || !s) {
+        // Edge of the map
+        return displayColors.OCEAN;
+      } else if (attr[p].biome == 'LAKE' || attr[p].biome == 'ICE' || attr[p].biome == 'SNOW'
+                 || attr[p].biome == 'SCORCHED' || attr[p].biome == 'BARE' || attr[p].biome == 'OCEAN') {
+        return color;
+      }
+      var A:Vector3D = new Vector3D(p.x, p.y, attr[p].elevation);
+      var B:Vector3D = new Vector3D(r.x, r.y, attr[r].elevation);
+      var C:Vector3D = new Vector3D(s.x, s.y, attr[s].elevation);
+      var normal:Vector3D = B.subtract(A).crossProduct(C.subtract(A));
+      if (normal.z < 0) { normal.scaleBy(-1); }
+      normal.normalize();
+      var light:Number = 0.5 + 25*normal.dotProduct(lightVector);
+      if (light < 0) light = 0;
+      if (light > 1) light = 1;
+      light = Math.round(light*100)/100;  // Discrete steps for easier shading
+      return interpolateColor(0x1d8e39, 0xcfb78b, light);
+    }
+
+    
+    public function colorWithSmoothColors(color:int, p:Point, q:Point, edge:Edge):int {
       var biome:String = attr[p].biome;
               
       if (biome != 'ICE' && biome != 'OCEAN' && biome != 'LAKE'
           && biome != 'SCORCHED' && biome != 'BARE' && biome != 'SNOW') {
         function smoothColor(elevation:Number, moisture:Number):int {
-          elevation = Math.round(elevation*10)/10;
-          moisture = Math.round(moisture*10)/10;
           return interpolateColor
             (interpolateColor(0xb19772, 0xcfb78b, elevation),
              interpolateColor(0x1d8e39, 0x97cb1b, elevation),
@@ -1404,12 +1431,17 @@ package {
                             mapMode = 'smooth';
                             drawMap();
                           }));
-      addChild(makeButton("see elevation", 650, 210,
+      addChild(makeButton("see slopes", 650, 210,
+                          function (e:Event):void {
+                            mapMode = 'slopes';
+                            drawMap();
+                          }));
+      addChild(makeButton("see elevation", 650, 240,
                           function (e:Event):void {
                             mapMode = 'elevation';
                             drawMap();
                           }));
-      addChild(makeButton("see moisture", 650, 240,
+      addChild(makeButton("see moisture", 650, 270,
                           function (e:Event):void {
                             mapMode = 'moisture';
                             drawMap();
@@ -1418,17 +1450,17 @@ package {
 
                
     public function addExportButtons():void {
-      addChild(makeButton("export elevation", 650, 300,
+      addChild(makeButton("export elevation", 650, 400,
                           function (e:Event):void {
                             new FileReference().save(makeExport('elevation'), 'elevation.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export moisture", 650, 330,
+      addChild(makeButton("export moisture", 650, 430,
                           function (e:Event):void {
                             new FileReference().save(makeExport('moisture'), 'moisture.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export overrides", 650, 360,
+      addChild(makeButton("export overrides", 650, 460,
                           function (e:Event):void {
                             new FileReference().save(makeExport('overrides'), 'overrides.data');
                             e.stopPropagation();
