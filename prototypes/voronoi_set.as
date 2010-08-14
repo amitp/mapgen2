@@ -1188,9 +1188,12 @@ package {
     // colors, and then save these bytes in a ByteArray. For override
     // codes, we turn off anti-aliasing.
     static public var exportOverrideColors:Object = {
-      /* override codes are 0:none, 0x10:river water, 0x20:lava, 0x30:snow,
-         0x40:ice, 0x50:ocean, 0x60:lake, 0x70:lake shore, 0x80:ocean shore,
-      0x90:road */
+      /* override codes are 0:none, 0x10:river water, 0x20:lava,
+         0x30:snow, 0x40:ice, 0x50:ocean, 0x60:lake, 0x70:lake shore,
+         0x80:ocean shore, 0x90:road.  These are ORed with 0x01:
+         polygon center, 0x02: safe polygon center. */
+      POLYGON_CENTER: 0x01,
+      POLYGON_CENTER_SAFE: 0x03,
       OCEAN: 0x50,
       COAST: 0x80,
       LAKE: 0x60,
@@ -1251,6 +1254,20 @@ package {
         stage.quality = 'low';
         exportBitmap.draw(exportGraphics, m);
         stage.quality = 'best';
+
+        // Mark the polygon centers in the export bitmap
+        for each (var p:Point in points) {
+            if (!attr[p].ocean) {
+              var q:Point = new Point(Math.floor(p.x * 2048/SIZE),
+                                    Math.floor(p.y * 2048/SIZE));
+              exportBitmap.setPixel(q.x, q.y,
+                                    exportBitmap.getPixel(q.x, q.y)
+                                    | (attr[p].road_connections?
+                                       exportOverrideColors.POLYGON_CENTER_SAFE
+                                       : exportOverrideColors.POLYGON_CENTER));
+            }
+          }
+        
         saveBitmapToArray();
       } else if (layer == 'elevation') {
         renderPolygons(exportGraphics.graphics, exportElevationColors, false, 'elevation', null);
