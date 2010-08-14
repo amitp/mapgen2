@@ -951,6 +951,8 @@ package {
     public function drawMap():void {
       graphicsReset();
       if (mapMode == 'biome') {
+        renderPolygons(graphics, displayColors, true, null, null);
+      } else if (mapMode == 'smooth') {
         renderPolygons(graphics, displayColors, true, null, colorWithSmoothColors);
       } else if (mapMode == 'elevation') {
         renderPolygons(graphics, elevationGradientColors, false, 'elevation', null);
@@ -1397,12 +1399,17 @@ package {
                             mapMode = 'biome';
                             drawMap();
                           }));
-      addChild(makeButton("see elevation", 650, 180,
+      addChild(makeButton("see smooth", 650, 180,
+                          function (e:Event):void {
+                            mapMode = 'smooth';
+                            drawMap();
+                          }));
+      addChild(makeButton("see elevation", 650, 210,
                           function (e:Event):void {
                             mapMode = 'elevation';
                             drawMap();
                           }));
-      addChild(makeButton("see moisture", 650, 210,
+      addChild(makeButton("see moisture", 650, 240,
                           function (e:Event):void {
                             mapMode = 'moisture';
                             drawMap();
@@ -1411,17 +1418,17 @@ package {
 
                
     public function addExportButtons():void {
-      addChild(makeButton("export elevation", 650, 270,
+      addChild(makeButton("export elevation", 650, 300,
                           function (e:Event):void {
                             new FileReference().save(makeExport('elevation'), 'elevation.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export moisture", 650, 300,
+      addChild(makeButton("export moisture", 650, 330,
                           function (e:Event):void {
                             new FileReference().save(makeExport('moisture'), 'moisture.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export overrides", 650, 330,
+      addChild(makeButton("export overrides", 650, 360,
                           function (e:Event):void {
                             new FileReference().save(makeExport('overrides'), 'overrides.data');
                             e.stopPropagation();
