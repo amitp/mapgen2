@@ -391,6 +391,7 @@ package {
           attr[edge].v1 = vedge.p1;
           attr[edge].d0 = dedge.p0;
           attr[edge].d1 = dedge.p1;
+          attr[edge].midpoint = vedge.p0 && vedge.p1 && Point.interpolate(vedge.p0, vedge.p1, 0.5);
         }
     }
 
@@ -798,7 +799,6 @@ package {
               if (attr[edge].d0 && attr[edge].d1 && attr[edge].v0 && attr[edge].v1
                   && !attr[edge].path0) {
                 var f:Number = NOISY_LINE_TRADEOFF;
-                var midpoint:Point = Point.interpolate(attr[edge].v0, attr[edge].v1, 0.5);
                 var p:Point = Point.interpolate(attr[edge].v0, attr[edge].d0, f);
                 var q:Point = Point.interpolate(attr[edge].v0, attr[edge].d1, f);
                 var r:Point = Point.interpolate(attr[edge].v1, attr[edge].d0, f);
@@ -809,8 +809,8 @@ package {
                 if (attr[attr[edge].d0].biome == attr[attr[edge].d1].biome) minLength = 8;
                 if (attr[attr[edge].d0].ocean && attr[attr[edge].d1].ocean) minLength = 100;
                 
-                attr[edge].path0 = noisy_line.buildLineSegments(attr[edge].v0, p, midpoint, q, minLength);
-                attr[edge].path1 = noisy_line.buildLineSegments(attr[edge].v1, s, midpoint, r, minLength);
+                attr[edge].path0 = noisy_line.buildLineSegments(attr[edge].v0, p, attr[edge].midpoint, q, minLength);
+                attr[edge].path1 = noisy_line.buildLineSegments(attr[edge].v1, s, attr[edge].midpoint, r, minLength);
                 _count++;
               }
             }
@@ -984,7 +984,7 @@ package {
                 // We pick the midpoint elevation/moisture between
                 // corners instead of between polygon centers because
                 // the resulting gradients tend to be smoother.
-                var midpoint:Point = Point.interpolate(corner0, corner1, 0.5);
+                var midpoint:Point = attr[edge].midpoint;
                 var midpointAttr:Number = 0.5*(attr[corner0][gradientFillProperty]+attr[corner1][gradientFillProperty]);
                 drawGradientTriangle
                   (graphics,
@@ -1112,10 +1112,9 @@ package {
           for each (q in attr[p].neighbors) {
               if (!attr[p].ocean && !attr[q].ocean && attr[p].watershed != attr[q].watershed && !attr[p].coast && !attr[q].coast) {
                 var edge:Edge = lookupEdgeFromCorner(p, q);
-                var midpoint:Point = Point.interpolate(attr[edge].v0, attr[edge].v1, 0.5);
                 graphics.lineStyle(2.5, 0x000000, 0.05*Math.sqrt((attr[attr[p].watershed].watershed_size || 1) + (attr[attr[q].watershed].watershed_size || 1)));
                 graphics.moveTo(attr[edge].d0.x, attr[edge].d0.y);
-                graphics.lineTo(midpoint.x, midpoint.y);
+                graphics.lineTo(attr[edge].midpoint.x, attr[edge].midpoint.y);
                 graphics.lineTo(attr[edge].d1.x, attr[edge].d1.y);
                 graphics.lineStyle();
               }
