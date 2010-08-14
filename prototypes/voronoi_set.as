@@ -1252,9 +1252,21 @@ package {
       if (!r || !s) {
         // Edge of the map
         return displayColors.OCEAN;
-      } else if (attr[p].biome == 'LAKE' || attr[p].biome == 'ICE' || attr[p].biome == 'SNOW'
-                 || attr[p].biome == 'SCORCHED' || attr[p].biome == 'BARE' || attr[p].biome == 'OCEAN') {
+      } else if (attr[p].biome == 'LAKE' || attr[p].biome == 'ICE' 
+                 || attr[p].biome == 'SCORCHED' || attr[p].biome == 'OCEAN') {
         return color;
+      }
+
+      var colorLow:int = 0x1d8e39, colorHigh:int = 0xcfb78b;
+      if (attr[p].biome == 'SNOW') {
+        colorLow = 0xcccccc;
+        colorHigh = 0xffffff;
+      } else if (attr[p].biome == 'BARE') {
+        colorLow = 0x444444;
+        colorHigh = 0x888888;
+      } else if (attr[p].biome == 'BEACH') {
+        colorLow = 0x807057;
+        colorHigh = 0xc0b097;
       }
       var A:Vector3D = new Vector3D(p.x, p.y, attr[p].elevation);
       var B:Vector3D = new Vector3D(r.x, r.y, attr[r].elevation);
@@ -1262,11 +1274,11 @@ package {
       var normal:Vector3D = B.subtract(A).crossProduct(C.subtract(A));
       if (normal.z < 0) { normal.scaleBy(-1); }
       normal.normalize();
-      var light:Number = 0.5 + 25*normal.dotProduct(lightVector);
+      var light:Number = 0.5 + 35*normal.dotProduct(lightVector);
       if (light < 0) light = 0;
       if (light > 1) light = 1;
       light = Math.round(light*100)/100;  // Discrete steps for easier shading
-      return interpolateColor(0x1d8e39, 0xcfb78b, light);
+      return interpolateColor(colorLow, colorHigh, light);
     }
 
     
