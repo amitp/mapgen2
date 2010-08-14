@@ -737,7 +737,7 @@ package {
       // to contour level K, gets contour level K+1.
       var queue:Array = [];
       var p:Point, q:Point, edge:Edge, newLevel:int;
-      var elevationThresholds:Array = [0, 0.05, 0.35, 0.65];
+      var elevationThresholds:Array = [0, 0.05, 0.25, 0.55, 1.0];
 
       for each (p in points) {
           if (attr[p].coast || attr[p].ocean) {
@@ -749,7 +749,7 @@ package {
         p = queue.shift();
         for each (q in attr[p].neighbors) {
             newLevel = attr[p].contour || 0;
-            if (attr[q].elevation > elevationThresholds[newLevel] && !attr[q].water) {
+            while (attr[q].elevation > elevationThresholds[newLevel] && !attr[q].water) {
               // NOTE: extend the contour line past bodies of
               // water so that roads don't terminate inside lakes.
               newLevel += 1;
