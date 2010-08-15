@@ -10,6 +10,7 @@ package {
   import flash.utils.Dictionary;
   import flash.utils.ByteArray;
   import flash.utils.getTimer;
+  import flash.utils.Timer;
   import flash.net.FileReference;
   import flash.system.System;
   import com.nodename.geom.Circle;
@@ -71,8 +72,10 @@ package {
     public var mapRandom:PM_PRNG = new PM_PRNG(487);
 
     // This is the current map style. UI buttons change this, and it
-    // persists when you make a new map.
+    // persists when you make a new map. The timer is used only when
+    // the map mode is '3d'.
     public var mapMode:String = 'biome';
+    public var render3dTimer:Timer = new Timer(1000/20, 0);
     
     // These store the graph data
     public var voronoi:Voronoi;
@@ -80,6 +83,11 @@ package {
     public var corners:Vector.<Point>;
     public var attr:Dictionary;
 
+    // These store 3d rendering data
+    private var rotationAnimation:Number = 0.0;
+    private var triangles3d:Array = [];
+    private var graphicsData:Vector.<IGraphicsData>;
+    
     public function voronoi_set() {
       stage.scaleMode = 'noScale';
       stage.align = 'TL';
@@ -90,6 +98,10 @@ package {
       addGenerateButtons();
       newIsland();
       go();
+
+      render3dTimer.addEventListener(TimerEvent.TIMER, function (e:TimerEvent):void {
+          drawMap();
+        });
     }
 
     // Random parameters governing the overall shape of the island
@@ -122,6 +134,9 @@ package {
         voronoi = null;
       }
 
+      // Reset the 3d triangle data
+      triangles3d = [];
+      
       // Clear the previous graph data. We'll reuse attr and points
       // when we can, but there's no easy way to reuse the Voronoi
       // object, so we'll allocate a new one.
@@ -950,7 +965,12 @@ package {
     // Draw the map in the current map mode
     public function drawMap():void {
       graphicsReset();
-      if (mapMode == 'biome') {
+
+      if (mapMode == '3d') {
+        if (!render3dTimer.running) render3dTimer.start();
+        render3dPolygons(graphics, displayColors, colorWithSlope);
+        return;
+      } else if (mapMode == 'biome') {
         renderPolygons(graphics, displayColors, true, null, null);
       } else if (mapMode == 'slopes') {
         renderPolygons(graphics, displayColors, true, null, colorWithSlope);
@@ -962,10 +982,93 @@ package {
         renderPolygons(graphics, moistureGradientColors, false, 'moisture', null);
       }
 
+      if (render3dTimer.running) render3dTimer.stop();
+
       if (mapMode != 'slopes' && mapMode != 'moisture') {
         renderRoads(graphics, displayColors);
       }
       renderEdges(graphics, displayColors);
+    }
+
+
+    // 3D rendering of polygons. If the 'triangles3d' array is empty,
+    // it's filled and the graphicsData is filled in as well. On
+    // rendering, the triangles3d array has to be z-sorted and then
+    // the resulting polygon data is transferred into graphicsData
+    // before rendering.
+    public function render3dPolygons(graphics:Graphics, colors:Object, colorFunction:Function):void {
+      var p:Point, q:Point, edge:Edge;
+      var zScale:Number = 0.15*SIZE;
+      
+      graphics.beginFill(colors.OCEAN);
+      graphics.drawRect(0, 0, SIZE, SIZE);
+      graphics.endFill();
+
+      if (triangles3d.length == 0) {
+        graphicsData = new Vector.<IGraphicsData>();
+        for each (p in points) {
+            for each (edge in attr[p].edges) {
+                var color:int = colors[attr[p].biome];
+                if (colorFunction != null) {
+                  color = colorFunction(color, p, q, edge);
+                }
+
+                // We'll draw two triangles: center - corner0 -
+                // midpoint and center - midpoint - corner1.
+                var corner0:Point = attr[edge].v0;
+                var corner1:Point = attr[edge].v1;
+
+                if (corner0 == null || corner1 == null) {
+                  // Edge of the map; we can't deal with it right now
+                  continue;
+                }
+
+                var zp:Number = zScale*attr[p].elevation;
+                var z0:Number = zScale*attr[corner0].elevation;
+                var z1:Number = zScale*attr[corner1].elevation;
+                triangles3d.push({
+                    a:new Vector3D(p.x, p.y, zp),
+                      b:new Vector3D(corner0.x, corner0.y, z0),
+                      c:new Vector3D(corner1.x, corner1.y, z1),
+                      rA:null,
+                      rB:null,
+                      rC:null,
+                      z:0.0,
+                      color:color
+                      });
+                graphicsData.push(new GraphicsSolidFill());
+                graphicsData.push(new GraphicsPath(Vector.<int>([GraphicsPathCommand.MOVE_TO, GraphicsPathCommand.LINE_TO, GraphicsPathCommand.LINE_TO]),
+                                                   Vector.<Number>([0, 0, 0, 0, 0, 0])));
+                graphicsData.push(new GraphicsEndFill());
+              }
+          }
+      }
+
+      var camera:Matrix3D = new Matrix3D();
+      camera.appendRotation(rotationAnimation, new Vector3D(0, 0, 1), new Vector3D(SIZE/2, SIZE/2));
+      camera.appendRotation(60, new Vector3D(1,0,0), new Vector3D(SIZE/2, SIZE/2));
+      rotationAnimation += 1;
+
+      for each (var tri:Object in triangles3d) {
+          tri.rA = camera.transformVector(tri.a);
+          tri.rB = camera.transformVector(tri.b);
+          tri.rC = camera.transformVector(tri.c);
+          tri.z = (tri.rA.z + tri.rB.z + tri.rC.z)/3;
+        }
+      triangles3d.sortOn('z', Array.NUMERIC);
+
+      for (var i:int = 0; i < triangles3d.length; i++) {
+        tri = triangles3d[i];
+        GraphicsSolidFill(graphicsData[i*3]).color = tri.color;
+        var data:Vector.<Number> = GraphicsPath(graphicsData[i*3+1]).data;
+        data[0] = tri.rA.x;
+        data[1] = tri.rA.y;
+        data[2] = tri.rB.x;
+        data[3] = tri.rB.y;
+        data[4] = tri.rC.x;
+        data[5] = tri.rC.y;
+      }
+      graphics.drawGraphicsData(graphicsData);
     }
 
     
@@ -1456,6 +1559,11 @@ package {
       addChild(makeButton("see moisture", 650, 270,
                           function (e:Event):void {
                             mapMode = 'moisture';
+                            drawMap();
+                          }));
+      addChild(makeButton("see 3d", 650, 300,
+                          function (e:Event):void {
+                            mapMode = '3d';
                             drawMap();
                           }));
     }
