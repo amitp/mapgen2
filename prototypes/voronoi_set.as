@@ -681,7 +681,10 @@ package {
 
 
     // Calculate the watershed of every land point. The watershed is
-    // the last downstream land point in the downslope graph.
+    // the last downstream land point in the downslope graph. TODO:
+    // watersheds are currently calculated on corners, but it'd be
+    // more useful to compute them on polygon centers so that every
+    // polygon can be marked as being in one watershed.
     public function calculateWatersheds():int {
       var p:Point, q:Point, i:int, changed:Boolean;
       
@@ -1017,6 +1020,10 @@ package {
         return;
       } else if (mapMode == 'polygons') {
         renderDebugPolygons(graphics, displayColors);
+      } else if (mapMode == 'watersheds') {
+        renderDebugPolygons(graphics, displayColors);
+        renderWatersheds(graphics);
+        return;
       } else if (mapMode == 'biome') {
         renderPolygons(graphics, displayColors, true, null, null);
       } else if (mapMode == 'slopes') {
@@ -1317,6 +1324,7 @@ package {
     }
 
 
+    // Render the polygons so that each can be seen clearly
     public function renderDebugPolygons(graphics:Graphics, colors:Object):void {
       var p:Point, edge:Edge;
 
@@ -1339,25 +1347,9 @@ package {
         }
     }
 
-    
-    private function DEBUG_drawPoints():void {
-      var p:Point, q:Point;
 
-      for each (p in points) {
-          graphics.beginFill(attr[p].water? 0x0000ff : 0x008800);
-          graphics.drawRect(p.x-1,p.y-1,2,2);
-          graphics.endFill();
-        }
-
-      for each (p in corners) {
-          graphics.beginFill(attr[p].ocean? 0x0000ff : 0x008800);
-          graphics.drawCircle(p.x, p.y, 1.2);
-          graphics.endFill();
-        }
-    }
-
-
-    private function DEBUG_drawWatersheds():void {
+    // Render the paths from each polygon to the ocean, showing watersheds
+    public function renderWatersheds(graphics:Graphics):void {
       var p:Point, q:Point;
 
       for each (p in corners) {
@@ -1636,7 +1628,12 @@ package {
                             mapMode = 'polygons';
                             drawMap();
                           }));
-      addChild(makeButton("see 3d", 650, 330,
+      addChild(makeButton("see watersheds", 650, 330,
+                          function (e:Event):void {
+                            mapMode = 'watersheds';
+                            drawMap();
+                          }));
+      addChild(makeButton("see 3d", 650, 360,
                           function (e:Event):void {
                             mapMode = '3d';
                             drawMap();
@@ -1645,17 +1642,17 @@ package {
 
                
     public function addExportButtons():void {
-      addChild(makeButton("export elevation", 650, 400,
+      addChild(makeButton("export elevation", 650, 450,
                           function (e:Event):void {
                             new FileReference().save(makeExport('elevation'), 'elevation.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export moisture", 650, 430,
+      addChild(makeButton("export moisture", 650, 480,
                           function (e:Event):void {
                             new FileReference().save(makeExport('moisture'), 'moisture.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export overrides", 650, 460,
+      addChild(makeButton("export overrides", 650, 510,
                           function (e:Event):void {
                             new FileReference().save(makeExport('overrides'), 'overrides.data');
                             e.stopPropagation();
