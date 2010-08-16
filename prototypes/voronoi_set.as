@@ -41,7 +41,7 @@ package {
       LAKESHORE: 0x225588,
       LAKE: 0x336699,
       RIVER: 0x336699,
-      MARSH: 0x116655,
+      MARSH: 0x2c6124,
       ICE: 0x99ffff,
       SCORCHED: 0x444433,
       BARE: 0x666666,
@@ -1330,19 +1330,23 @@ package {
 
       for each (p in points) {
           if (attr[p].ocean) continue;
-          graphics.beginFill(interpolateColor(colors[attr[p].biome], 0xbbbbbb, 0.4));
+          graphics.beginFill(interpolateColor(colors[attr[p].biome], 0xdddddd, 0.2));
           for each (edge in attr[p].edges) {
               if (attr[edge].v0 && attr[edge].v1) {
                 graphics.moveTo(p.x, p.y);
                 graphics.lineTo(attr[edge].v0.x, attr[edge].v0.y);
-                graphics.lineStyle(attr[edge].river? 2 : 1, attr[edge].river? 0x0066cc : 0x000000, 0.4);
+                if (attr[edge].river) {
+                  graphics.lineStyle(2, displayColors.RIVER, 1.0);
+                } else {
+                  graphics.lineStyle(1, 0x000000, 0.4);
+                }
                 graphics.lineTo(attr[edge].v1.x, attr[edge].v1.y);
                 graphics.lineStyle();
               }
             }
           graphics.endFill();
-          graphics.beginFill(0x000000);
-          graphics.drawCircle(p.x, p.y, 1.5);
+          graphics.beginFill(0x000000, 0.7);
+          graphics.drawCircle(p.x, p.y, 1.3);
           graphics.endFill();
         }
     }
@@ -1417,7 +1421,7 @@ package {
       if (!r || !s) {
         // Edge of the map
         return displayColors.OCEAN;
-      } else if (attr[p].biome == 'LAKE' || attr[p].biome == 'ICE' 
+      } else if (attr[p].biome == 'LAKE' || attr[p].biome == 'ICE' || attr[p].biome == 'MARSH'
                  || attr[p].biome == 'SCORCHED' || attr[p].biome == 'OCEAN') {
         return color;
       }
@@ -1450,7 +1454,7 @@ package {
     public function colorWithSmoothColors(color:int, p:Point, q:Point, edge:Edge):int {
       var biome:String = attr[p].biome;
               
-      if (biome != 'ICE' && biome != 'OCEAN' && biome != 'LAKE'
+      if (biome != 'ICE' && biome != 'OCEAN' && biome != 'LAKE' && biome != 'MARSH'
           && biome != 'SCORCHED' && biome != 'BARE' && biome != 'SNOW') {
         function smoothColor(elevation:Number, moisture:Number):int {
           return interpolateColor
