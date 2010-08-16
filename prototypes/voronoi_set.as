@@ -30,9 +30,10 @@ package {
     static public var NUM_POINTS:int = 2000;
     static public var SIZE:int = 600;
     static public var ISLAND_FACTOR:Number = 1.07;  // 1.0 means no small islands; 2.0 leads to a lot
-    static public var NOISY_LINE_TRADEOFF:Number = 0.1;  // low: jagged vedge; high: jagged dedge
+    static public var NOISY_LINE_TRADEOFF:Number = 0.5;  // low: jagged vedge; high: jagged dedge
     static public var FRACTION_LAVA_FISSURES:Number = 0.2;  // 0 to 1, probability of fissure
     static public var LAKE_THRESHOLD:Number = 0.3;  // 0 to 1, fraction of water corners for water polygon
+    static public var NUM_LLOYD_ITERATIONS:int = 2;
     
     static public var displayColors:Object = {
       OCEAN: 0x555599,
@@ -170,6 +171,12 @@ package {
       generateRandomPoints();
       Debug.trace("TIME for random points:", getTimer()-t);
 
+
+      // Improve the quality of that set by spacing them better
+      t = getTimer();
+      improveRandomPoints();
+      Debug.trace("TIME for improving point set:", getTimer()-t);
+
       
       // Build the Voronoi structure with our random points
       t = getTimer();
@@ -292,9 +299,10 @@ package {
     // ocean. We'll determine ocean later by looking at what's
     // connected to ocean.
     public function generateRandomPoints():void {
-      for (var i:int = 0; i < NUM_POINTS; i++) {
-        var p:Point = new Point(mapRandom.nextDoubleRange(10, SIZE-10),
-                                mapRandom.nextDoubleRange(10, SIZE-10));
+      var p:Point, i:int;
+      for (i = 0; i < NUM_POINTS; i++) {
+        p = new Point(mapRandom.nextDoubleRange(10, SIZE-10),
+                      mapRandom.nextDoubleRange(10, SIZE-10));
         points.push(p);
         attr[p] = {
           type: 'v'
@@ -302,6 +310,42 @@ package {
       }
     }
 
+    
+    // Improve the random set of points with Lloyd Relaxation.
+    public function improveRandomPoints():void {
+      // We'd really like to generate "blue noise". Algorithms:
+      // 1. Poisson dart throwing: check each new point against all
+      //     existing points, and reject it if it's too close.
+      // 2. Start with a hexagonal grid and randomly perturb points.
+      // 3. Lloyd Relaxation: move each point to the centroid of the
+      //     generated Voronoi polygon, then generate Voronoi again.
+      // 4. Use force-based layout algorithms to push points away.
+      // 5. More at http://www.cs.virginia.edu/~gfx/pubs/antimony/
+      // Option 3 is implemented here. If it's run for too many iterations,
+      // it will turn into a grid, but convergence is very slow, and we only
+      // run it a few times.
+      var i:int, p:Point, q:Point, voronoi:Voronoi, region:Vector.<Point>;
+      for (i = 0; i < NUM_LLOYD_ITERATIONS; i++) {
+        voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
+        for each (p in points) {
+            region = voronoi.region(p);
+            // NOTE: The attr[] dictionary is indexed on the identity
+            // of the Point, not its coordinates, and this step occurs
+            // early enough that it's safe to modify the coordinates.
+            p.x = 0.0;
+            p.y = 0.0;
+            for each (q in region) {
+                p.x += q.x;
+                p.y += q.y;
+              }
+            p.x /= region.length;
+            p.y /= region.length;
+            region.splice(0, region.length);
+          }
+        voronoi.dispose();
+      }
+    }
+    
     
     // Build graph data structure in the 'attr' objects, based on
     // information in the Voronoi results: attr[point].neighbors will
@@ -849,6 +893,7 @@ package {
                 if (attr[attr[edge].d0].water != attr[attr[edge].d1].water) minLength = 3;
                 if (attr[attr[edge].d0].biome == attr[attr[edge].d1].biome) minLength = 8;
                 if (attr[attr[edge].d0].ocean && attr[attr[edge].d1].ocean) minLength = 100;
+                if (attr[edge].river || attr[point].elevation > 0.8) minLength = 1;
                 
                 attr[edge].path0 = noisy_line.buildLineSegments(attr[edge].v0, p, attr[edge].midpoint, q, minLength);
                 attr[edge].path1 = noisy_line.buildLineSegments(attr[edge].v1, s, attr[edge].midpoint, r, minLength);
@@ -970,6 +1015,8 @@ package {
         if (!render3dTimer.running) render3dTimer.start();
         render3dPolygons(graphics, displayColors, colorWithSlope);
         return;
+      } else if (mapMode == 'polygons') {
+        renderDebugPolygons(graphics, displayColors);
       } else if (mapMode == 'biome') {
         renderPolygons(graphics, displayColors, true, null, null);
       } else if (mapMode == 'slopes') {
@@ -987,7 +1034,9 @@ package {
       if (mapMode != 'slopes' && mapMode != 'moisture') {
         renderRoads(graphics, displayColors);
       }
-      renderEdges(graphics, displayColors);
+      if (mapMode != 'polygons') {
+        renderEdges(graphics, displayColors);
+      }
     }
 
 
@@ -1187,10 +1236,8 @@ package {
                     // and at right angles to them. In between we
                     // generate two control points A and B and one
                     // additional vertex C.  This usually works but
-                    // not always. TODO: compute d as the distance
-                    // from the center to the line instead of center
-                    // to the midpoint.
-                    d = 0.4*Math.min
+                    // not always.
+                    d = 0.5*Math.min
                       (attr[edge1].midpoint.subtract(p).length,
                        attr[edge2].midpoint.subtract(p).length);
                     A = normalTowards(edge1, p, d).add(attr[edge1].midpoint);
@@ -1270,6 +1317,29 @@ package {
     }
 
 
+    public function renderDebugPolygons(graphics:Graphics, colors:Object):void {
+      var p:Point, edge:Edge;
+
+      for each (p in points) {
+          if (attr[p].ocean) continue;
+          graphics.beginFill(interpolateColor(colors[attr[p].biome], 0xbbbbbb, 0.4));
+          for each (edge in attr[p].edges) {
+              if (attr[edge].v0 && attr[edge].v1) {
+                graphics.moveTo(p.x, p.y);
+                graphics.lineTo(attr[edge].v0.x, attr[edge].v0.y);
+                graphics.lineStyle(attr[edge].river? 2 : 1, attr[edge].river? 0x0066cc : 0x000000, 0.4);
+                graphics.lineTo(attr[edge].v1.x, attr[edge].v1.y);
+                graphics.lineStyle();
+              }
+            }
+          graphics.endFill();
+          graphics.beginFill(0x000000);
+          graphics.drawCircle(p.x, p.y, 1.5);
+          graphics.endFill();
+        }
+    }
+
+    
     private function DEBUG_drawPoints():void {
       var p:Point, q:Point;
 
@@ -1561,7 +1631,12 @@ package {
                             mapMode = 'moisture';
                             drawMap();
                           }));
-      addChild(makeButton("see 3d", 650, 300,
+      addChild(makeButton("see polygons", 650, 300,
+                          function (e:Event):void {
+                            mapMode = 'polygons';
+                            drawMap();
+                          }));
+      addChild(makeButton("see 3d", 650, 330,
                           function (e:Event):void {
                             mapMode = '3d';
                             drawMap();
