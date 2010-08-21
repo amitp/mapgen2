@@ -6,7 +6,7 @@ package {
   import flash.geom.*;
   import flash.display.*;
   import flash.events.*;
-  import flash.text.TextField;
+  import flash.text.*;
   import flash.utils.Dictionary;
   import flash.utils.ByteArray;
   import flash.utils.getTimer;
@@ -29,7 +29,6 @@ package {
   public class voronoi_set extends Sprite {
     static public var NUM_POINTS:int = 2000;
     static public var SIZE:int = 600;
-    static public var ISLAND_FACTOR:Number = 1.07;  // 1.0 means no small islands; 2.0 leads to a lot
     static public var NOISY_LINE_TRADEOFF:Number = 0.5;  // low: jagged vedge; high: jagged dedge
     static public var FRACTION_LAVA_FISSURES:Number = 0.2;  // 0 to 1, probability of fissure
     static public var LAKE_THRESHOLD:Number = 0.3;  // 0 to 1, fraction of water corners for water polygon
@@ -41,7 +40,7 @@ package {
       LAKESHORE: 0x225588,
       LAKE: 0x336699,
       RIVER: 0x336699,
-      MARSH: 0x2c6124,
+      MARSH: 0x2f6666,
       ICE: 0x99ffff,
       SCORCHED: 0x444433,
       BARE: 0x666666,
@@ -52,8 +51,8 @@ package {
       SAVANNAH: 0xaabb88,
       GRASSLANDS: 0x88aa55,
       DRY_FOREST: 0x679459,
-      RAIN_FOREST: 0x449955,
-      SWAMP: 0x337744,
+      RAIN_FOREST: 0x559966,
+      SWAMP: 0x448855,
       ROAD: 0x664433
     };
 
@@ -68,8 +67,15 @@ package {
       GRADIENT_LOW: 0xbbaa33,
       GRADIENT_HIGH: 0x4466ff
     };
-      
+
+    // Island shape is controlled by the islandRandom seed and the
+    // type of island. The islandShape function uses both of them to
+    // determine whether any point should be water or land.
     public var islandRandom:PM_PRNG = new PM_PRNG(487);
+    public var islandType:String = 'Radial';
+    public var islandShape:Function;
+
+    // Island details are controlled by this random generator
     public var mapRandom:PM_PRNG = new PM_PRNG(487);
 
     // This is the current map style. UI buttons change this, and it
@@ -89,6 +95,7 @@ package {
     private var triangles3d:Array = [];
     private var graphicsData:Vector.<IGraphicsData>;
     
+
     public function voronoi_set() {
       stage.scaleMode = 'noScale';
       stage.align = 'TL';
@@ -97,7 +104,7 @@ package {
 
       addExportButtons();
       addGenerateButtons();
-      newIsland();
+      newIsland(islandType);
       go();
 
       render3dTimer.addEventListener(TimerEvent.TIMER, function (e:TimerEvent):void {
@@ -105,17 +112,16 @@ package {
         });
     }
 
+    
     // Random parameters governing the overall shape of the island
-    public var island:Object;
-    public function newIsland():void {
-      island = {
-        bumps: islandRandom.nextIntRange(1, 6),
-        startAngle: islandRandom.nextDoubleRange(0, 2*Math.PI),
-        dipAngle: islandRandom.nextDoubleRange(0, 2*Math.PI),
-        dipWidth: islandRandom.nextDoubleRange(0.2, 0.7)
-      };
+    public function newIsland(type:String):void {
+      islandType = type;
+      islandShape = IslandShape['make'+type](islandRandom.seed);
+      islandRandom.nextInt();
+      islandRandom.seed %= 100000;
     }
 
+    
     public function reset():void {
       // Break cycles before we remove the reference to attr;
       // otherwise the garbage collector won't release it.
@@ -153,7 +159,10 @@ package {
     public function graphicsReset():void {
       graphics.clear();
       graphics.beginFill(0x555599);
-      graphics.drawRect(-1000, -1000, 2000, 2000);
+      graphics.drawRect(0, 0, 600, 2000);
+      graphics.endFill();
+      graphics.beginFill(0xbbbbaa);
+      graphics.drawRect(600, 0, 2000, 2000);
       graphics.endFill();
     }
 
@@ -468,7 +477,7 @@ package {
       var queue:Array = [];
       
       for each (p in corners) {
-          attr[p].water = !inside(island, p);
+          attr[p].water = !inside(p);
         }
 
       for each (p in corners) {
@@ -925,18 +934,8 @@ package {
 
     
     // Determine whether a given point should be on the island or in the water.
-    public function inside(island:Object, p:Point):Boolean {
-      var q:Point = new Point(p.x-SIZE/2, p.y-SIZE/2);  // normalize to center of island
-      var angle:Number = Math.atan2(q.y, q.x);
-      var length:Number = 0.5 * (Math.max(Math.abs(q.x), Math.abs(q.y)) + q.length) / (SIZE/2);
-      var r1:Number = 0.5 + 0.40*Math.sin(island.startAngle + island.bumps*angle + Math.cos((island.bumps+3)*angle));
-      var r2:Number = 0.7 - 0.20*Math.sin(island.startAngle + island.bumps*angle - Math.sin((island.bumps+2)*angle));
-      if (Math.abs(angle - island.dipAngle) < island.dipWidth
-          || Math.abs(angle - island.dipAngle + 2*Math.PI) < island.dipWidth
-          || Math.abs(angle - island.dipAngle - 2*Math.PI) < island.dipWidth) {
-        r1 = r2 = 0.2;
-      }
-      return  (length < r1 || (length > r1*ISLAND_FACTOR && length < r2));
+    public function inside(p:Point):Boolean {
+      return islandShape(new Point(2*(p.x/SIZE - 0.5), 2*(p.y/SIZE - 0.5)));
     }
 
 
@@ -1063,6 +1062,7 @@ package {
       if (triangles3d.length == 0) {
         graphicsData = new Vector.<IGraphicsData>();
         for each (p in points) {
+            if (attr[p].ocean) continue;
             for each (edge in attr[p].edges) {
                 var color:int = colors[attr[p].biome];
                 if (colorFunction != null) {
@@ -1577,67 +1577,102 @@ package {
     }
 
 
-    public function makeButton(label:String, x:int, y:int, callback:Function):TextField {
+    // Make a button or label. If the callback is null, it's just a label.
+    public function makeButton(label:String, x:int, y:int, width:int, callback:Function):TextField {
       var button:TextField = new TextField();
+      var format:TextFormat = new TextFormat();
+      format.font = "Arial Unicode MS";
+      format.align = 'center';
+      button.defaultTextFormat = format;
       button.text = label;
       button.selectable = false;
       button.background = true;
       button.backgroundColor = 0xffffcc;
       button.x = x;
       button.y = y;
+      button.width = width;
       button.height = 20;
-      button.addEventListener(MouseEvent.CLICK, callback);
+      if (callback != null) button.addEventListener(MouseEvent.CLICK, callback);
       return button;
     }
 
+
     
     public function addGenerateButtons():void {
-      addChild(makeButton("new shape", 650, 50,
+      var islandShapeButton:TextField = makeButton("New Island:", 650, 8, 100, null);
+      var islandSeedButton:TextField = makeButton(islandRandom.seed.toString(), 650, 55, 100, null);
+      islandShapeButton.background = false;
+      islandSeedButton.backgroundColor = 0xccccff;
+      islandSeedButton.selectable = true;
+      islandSeedButton.type = TextFieldType.INPUT;
+      
+      addChild(islandShapeButton);
+      addChild(islandSeedButton);
+      addChild(makeButton("Rad", 650, 30, 20,
                           function (e:Event):void {
-                            newIsland();
+                            newIsland('Radial');
+                            islandSeedButton.text = islandRandom.seed.toString();
                             go();
                           }));
-      addChild(makeButton("same shape", 650, 80,
+      addChild(makeButton("Prl", 672, 30, 19,
+                          function (e:Event):void {
+                            newIsland('Perlin');
+                            islandSeedButton.text = islandRandom.seed.toString();
+                            go();
+                          }));
+      addChild(makeButton("Sq", 693, 30, 18,
+                          function (e:Event):void {
+                            newIsland('Square');
+                            islandSeedButton.text = islandRandom.seed.toString();
+                            go();
+                          }));
+      addChild(makeButton("Bl", 713, 30, 18,
+                          function (e:Event):void {
+                            newIsland('Blob');
+                            islandSeedButton.text = islandRandom.seed.toString();
+                            go();
+                          }));
+      addChild(makeButton("\u267a", 733, 30, 17,
                           function (e:Event):void {
                             go();
                           }));
       
-      addChild(makeButton("see biomes", 650, 150,
+      addChild(makeButton("see biomes", 650, 150, 100,
                           function (e:Event):void {
                             mapMode = 'biome';
                             drawMap();
                           }));
-      addChild(makeButton("see smooth", 650, 180,
+      addChild(makeButton("see smooth", 650, 180, 100,
                           function (e:Event):void {
                             mapMode = 'smooth';
                             drawMap();
                           }));
-      addChild(makeButton("see slopes", 650, 210,
+      addChild(makeButton("see slopes", 650, 210, 100,
                           function (e:Event):void {
                             mapMode = 'slopes';
                             drawMap();
                           }));
-      addChild(makeButton("see elevation", 650, 240,
+      addChild(makeButton("see elevation", 650, 240, 100,
                           function (e:Event):void {
                             mapMode = 'elevation';
                             drawMap();
                           }));
-      addChild(makeButton("see moisture", 650, 270,
+      addChild(makeButton("see moisture", 650, 270, 100,
                           function (e:Event):void {
                             mapMode = 'moisture';
                             drawMap();
                           }));
-      addChild(makeButton("see polygons", 650, 300,
+      addChild(makeButton("see polygons", 650, 300, 100,
                           function (e:Event):void {
                             mapMode = 'polygons';
                             drawMap();
                           }));
-      addChild(makeButton("see watersheds", 650, 330,
+      addChild(makeButton("see watersheds", 650, 330, 100,
                           function (e:Event):void {
                             mapMode = 'watersheds';
                             drawMap();
                           }));
-      addChild(makeButton("see 3d", 650, 360,
+      addChild(makeButton("see 3d", 650, 360, 100,
                           function (e:Event):void {
                             mapMode = '3d';
                             drawMap();
@@ -1646,23 +1681,96 @@ package {
 
                
     public function addExportButtons():void {
-      addChild(makeButton("export elevation", 650, 450,
+      addChild(makeButton("export elevation", 650, 450, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('elevation'), 'elevation.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export moisture", 650, 480,
+      addChild(makeButton("export moisture", 650, 480, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('moisture'), 'moisture.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export overrides", 650, 510,
+      addChild(makeButton("export overrides", 650, 510, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('overrides'), 'overrides.data');
                             e.stopPropagation();
                           }));
     }
     
+  }
+  
+}
+
+
+// Factory class to build the 'inside' function that tells us whether
+// a point should be on the island or in the water.
+import flash.geom.Point;
+import flash.display.BitmapData;
+import de.polygonal.math.PM_PRNG;
+class IslandShape {
+  // This class has factory functions for generating islands of
+  // different shapes. The factory returns a function that takes a
+  // normalized point (x and y are -1 to +1) and returns true if the
+  // point should be on the island, and false if it should be water
+  // (lake or ocean).
+
+  
+  // The radial island radius is based on overlapping sine waves 
+  static public var ISLAND_FACTOR:Number = 1.07;  // 1.0 means no small islands; 2.0 leads to a lot
+  static public function makeRadial(seed:int):Function {
+    var islandRandom:PM_PRNG = new PM_PRNG(seed);
+    var bumps:int = islandRandom.nextIntRange(1, 6);
+    var startAngle:Number = islandRandom.nextDoubleRange(0, 2*Math.PI);
+    var dipAngle:Number = islandRandom.nextDoubleRange(0, 2*Math.PI);
+    var dipWidth:Number = islandRandom.nextDoubleRange(0.2, 0.7);
+    
+    function inside(q:Point):Boolean {
+      var angle:Number = Math.atan2(q.y, q.x);
+      var length:Number = 0.5 * (Math.max(Math.abs(q.x), Math.abs(q.y)) + q.length);
+
+      var r1:Number = 0.5 + 0.40*Math.sin(startAngle + bumps*angle + Math.cos((bumps+3)*angle));
+      var r2:Number = 0.7 - 0.20*Math.sin(startAngle + bumps*angle - Math.sin((bumps+2)*angle));
+      if (Math.abs(angle - dipAngle) < dipWidth
+          || Math.abs(angle - dipAngle + 2*Math.PI) < dipWidth
+          || Math.abs(angle - dipAngle - 2*Math.PI) < dipWidth) {
+        r1 = r2 = 0.2;
+      }
+      return  (length < r1 || (length > r1*ISLAND_FACTOR && length < r2));
+    }
+
+    return inside;
+  }
+
+
+  // The Perlin-based island combines perlin noise with the radius
+  static public function makePerlin(seed:int):Function {
+    var perlin:BitmapData = new BitmapData(256, 256);
+    perlin.perlinNoise(64, 64, 8, seed, false, true);
+    
+    return function (q:Point):Boolean {
+      var c:Number = (perlin.getPixel(int((q.x+1)*128), int((q.y+1)*128)) & 0xff) / 255.0;
+      return c > (0.3+0.3*q.length*q.length);
+    };
+  }
+
+
+  // The square shape fills the entire space with land
+  static public function makeSquare(seed:int):Function {
+    return function (q:Point):Boolean {
+      return true;
+    };
+  }
+
+
+  // The blob island is shaped like Amit's blob logo
+  static public function makeBlob(seed:int):Function {
+    return function(q:Point):Boolean {
+      var eye1:Boolean = new Point(q.x-0.2, q.y/2+0.2).length < 0.05;
+      var eye2:Boolean = new Point(q.x+0.2, q.y/2+0.2).length < 0.05;
+      var body:Boolean = q.length < 0.8 - 0.18*Math.sin(5*Math.atan2(q.y, q.x));
+      return body && !eye1 && !eye2;
+    };
   }
   
 }
