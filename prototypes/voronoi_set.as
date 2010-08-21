@@ -605,13 +605,15 @@ package {
               if (attr[q].border) {
                 attr[p].border = true;
                 attr[p].ocean = true;
+                attr[q].water = true;
                 queue.push(p);
               }
               if (attr[q].water) {
                 attr[p].water = (attr[p].water || 0) + 1;
               }
             }
-          if (attr[p].water && attr[p].water < attr[p].corners.length * LAKE_THRESHOLD) {
+          if (!attr[p].ocean && attr[p].water
+              && attr[p].water < attr[p].corners.length * LAKE_THRESHOLD) {
             delete attr[p].water;
           }
         }
@@ -642,8 +644,7 @@ package {
       // Set the corner attributes based on the computed polygon
       // attributes. If all polygons connected to this corner are
       // ocean, then it's ocean; if all are land, then it's land;
-      // otherwise it's coast. We no longer want the 'water'
-      // attribute; that was used only to determine polygon types.
+      // otherwise it's coast.
       for each (p in corners) {
           numOcean = 0;
           numLand = 0;
@@ -653,7 +654,7 @@ package {
             }
           attr[p].ocean = (numOcean == attr[p].corners.length);
           attr[p].coast = (numOcean > 0) && (numLand > 0);
-          attr[p].water = (numLand != attr[p].corners.length) && !attr[p].coast;
+          attr[p].water = attr[p].border || ((numLand != attr[p].corners.length) && !attr[p].coast);
         }
     }
   
