@@ -74,6 +74,7 @@ package {
     public var islandRandom:PM_PRNG = new PM_PRNG(487);
     public var islandType:String = 'Radial';
     public var islandShape:Function;
+    public var islandSeedInput:TextField = makeButton("487", 0, 0, 100, null);
 
     // Island details are controlled by this random generator
     public var mapRandom:PM_PRNG = new PM_PRNG(487);
@@ -1601,44 +1602,45 @@ package {
       return button;
     }
 
-
     
     public function addGenerateButtons():void {
-      var islandShapeButton:TextField = makeButton("New Island:", 650, 8, 100, null);
-      var islandSeedButton:TextField = makeButton(islandRandom.seed.toString(), 650, 55, 100, null);
+      var islandShapeButton:TextField = makeButton("New Island Shape:", 650, 8, 100, null);
       islandShapeButton.background = false;
-      islandSeedButton.backgroundColor = 0xccccff;
-      islandSeedButton.selectable = true;
-      islandSeedButton.type = TextFieldType.INPUT;
+      islandSeedInput.x = 675;
+      islandSeedInput.y = 30;
+      islandSeedInput.width = 50;
+      islandSeedInput.backgroundColor = 0xccddcc;
+      islandSeedInput.selectable = true;
+      islandSeedInput.type = TextFieldType.INPUT;
       
       addChild(islandShapeButton);
-      addChild(islandSeedButton);
-      addChild(makeButton("Rad", 650, 30, 20,
+      addChild(islandSeedInput);
+      addChild(makeButton("Radial", 623, 30, 50,
                           function (e:Event):void {
                             newIsland('Radial');
-                            islandSeedButton.text = islandRandom.seed.toString();
+                            islandSeedInput.text = islandRandom.seed.toString();
                             go();
                           }));
-      addChild(makeButton("Prl", 672, 30, 19,
+      addChild(makeButton("Perlin", 727, 30, 50,
                           function (e:Event):void {
                             newIsland('Perlin');
-                            islandSeedButton.text = islandRandom.seed.toString();
+                            islandSeedInput.text = islandRandom.seed.toString();
                             go();
                           }));
-      addChild(makeButton("Sq", 693, 30, 18,
+      addChild(makeButton("Square", 623, 52, 45,
                           function (e:Event):void {
                             newIsland('Square');
-                            islandSeedButton.text = islandRandom.seed.toString();
+                            islandSeedInput.text = "";
                             go();
                           }));
-      addChild(makeButton("Bl", 713, 30, 18,
+      addChild(makeButton("Same \u267a", 670, 52, 60,
+                          function (e:Event):void {
+                            go();
+                          }));
+      addChild(makeButton("Blob", 732, 52, 45,
                           function (e:Event):void {
                             newIsland('Blob');
-                            islandSeedButton.text = islandRandom.seed.toString();
-                            go();
-                          }));
-      addChild(makeButton("\u267a", 733, 30, 17,
-                          function (e:Event):void {
+                            islandSeedInput.text = "";
                             go();
                           }));
       
