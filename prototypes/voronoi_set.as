@@ -921,6 +921,46 @@ package {
           }
         }
     }
+
+
+    // Helper function: build a single noisy line in a quadrilateral A-B-C-D,
+    // and store the output points in a Vector.
+    static public function buildNoisyLineSegments(random:PM_PRNG, A:Point, B:Point, C:Point, D:Point, minLength:Number):Vector.<Point> {
+      var points:Vector.<Point> = new Vector.<Point>();
+
+      function subdivide(A:Point, B:Point, C:Point, D:Point):void {
+        if (A.subtract(C).length < minLength || B.subtract(D).length < minLength) {
+          return;
+        }
+
+        // Subdivide the quadrilateral
+        var p:Number = random.nextDoubleRange(0.1, 0.9);  // vertical (along A-D and B-C)
+        var q:Number = random.nextDoubleRange(0.1, 0.9);  // horizontal (along A-B and D-C)
+
+        // Midpoints
+        var E:Point = Point.interpolate(A, D, p);
+        var F:Point = Point.interpolate(B, C, p);
+        var G:Point = Point.interpolate(A, B, q);
+        var I:Point = Point.interpolate(D, C, q);
+        
+        // Central point
+        var H:Point = Point.interpolate(E, F, q);
+        
+        // Divide the quad into subquads, but meet at H
+        var s:Number = 1.0 - random.nextDoubleRange(-0.4, +0.4);
+        var t:Number = 1.0 - random.nextDoubleRange(-0.4, +0.4);
+
+        subdivide(A, Point.interpolate(G, B, s), H, Point.interpolate(E, D, t));
+        points.push(H);
+        subdivide(H, Point.interpolate(F, C, s), C, Point.interpolate(I, D, t));
+      }
+
+      points.push(A);
+      subdivide(A, B, C, D);
+      points.push(C);
+      return points;
+    }
+    
     
     // Build noisy line paths for each of the Voronoi edges. There are
     // two noisy line paths for each edge, each covering half the
@@ -943,10 +983,10 @@ package {
                 if (attr[attr[edge].d0].water != attr[attr[edge].d1].water) minLength = 3;
                 if (attr[attr[edge].d0].biome == attr[attr[edge].d1].biome) minLength = 8;
                 if (attr[attr[edge].d0].ocean && attr[attr[edge].d1].ocean) minLength = 100;
-                if (attr[edge].river || attr[point].elevation > 0.8) minLength = 1;
+                if (attr[edge].river || attr[edge].lava) minLength = 1;
                 
-                attr[edge].path0 = noisy_line.buildLineSegments(attr[edge].v0, p, attr[edge].midpoint, q, minLength);
-                attr[edge].path1 = noisy_line.buildLineSegments(attr[edge].v1, s, attr[edge].midpoint, r, minLength);
+                attr[edge].path0 = buildNoisyLineSegments(mapRandom, attr[edge].v0, p, attr[edge].midpoint, q, minLength);
+                attr[edge].path1 = buildNoisyLineSegments(mapRandom, attr[edge].v1, s, attr[edge].midpoint, r, minLength);
                 _count++;
               }
             }
