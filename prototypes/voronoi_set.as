@@ -282,6 +282,12 @@ package {
       calculateMoisture();
       Debug.trace("TIME for moisture calculation:", getTimer()-t);
 
+
+      // Create lava.
+      t = getTimer();
+      createLava();
+      Debug.trace("TIME for lava:", getTimer()-t);
+
       
       // Choose polygon biomes based on elevation, water, ocean
       t = getTimer();
@@ -813,6 +819,23 @@ package {
     }
 
 
+    // Lava fissures are at high elevations where moisture is low
+    public function createLava():void {
+      var edge:Edge, p:Point, q:Point;
+      for each (p in points) {
+          for each (q in attr[p].neighbors) {
+              edge = lookupEdgeFromCenter(p, q);
+              if (!attr[edge].river && !attr[p].water && !attr[q].water
+                  && attr[p].elevation > 0.85 && attr[q].elevation > 0.85
+                  && attr[p].moisture < 0.5 && attr[q].moisture < 0.5
+                  && mapRandom.nextDouble() < FRACTION_LAVA_FISSURES) {
+                attr[edge].lava = true;
+              }
+            }
+        }
+    }
+
+    
     // We want to mark different elevation zones so that we can draw
     // island-circling roads that divide the areas.
     public function createRoads():void {
@@ -1319,10 +1342,7 @@ package {
               } else if (attr[edge].river != null) {
                 // River edge
                 graphics.lineStyle(Math.sqrt(attr[edge].river), colors.RIVER);
-              } else if (!attr[edge].river && !attr[p].water && !attr[q].water
-                         && attr[p].elevation > 0.85 && attr[q].elevation > 0.85
-                         && attr[p].moisture < 0.5 && attr[q].moisture < 0.5
-                         && mapRandom.nextDouble() < FRACTION_LAVA_FISSURES) {
+              } else if (attr[edge].lava != null) {
                 // Lava flow
                 graphics.lineStyle(1, colors.LAVA);
               } else {
