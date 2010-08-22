@@ -1330,7 +1330,6 @@ package {
       var p:Point, edge:Edge;
 
       for each (p in points) {
-          if (attr[p].ocean) continue;
           graphics.beginFill(interpolateColor(colors[attr[p].biome], 0xdddddd, 0.2));
           for each (edge in attr[p].edges) {
               if (attr[edge].v0 && attr[edge].v1) {
@@ -1346,9 +1345,14 @@ package {
               }
             }
           graphics.endFill();
-          graphics.beginFill(0x000000, 0.7);
+          graphics.beginFill(attr[p].water > 0 ? 0x00ffff : attr[p].ocean? 0xff0000 : 0x000000, 0.7);
           graphics.drawCircle(p.x, p.y, 1.3);
           graphics.endFill();
+          for each (var q:Point in attr[p].corners) {
+              graphics.beginFill(attr[q].water? 0x0000ff : 0x009900);
+              graphics.drawRect(q.x-0.7, q.y-0.7, 1.5, 1.5);
+              graphics.endFill();
+            }
         }
     }
 
