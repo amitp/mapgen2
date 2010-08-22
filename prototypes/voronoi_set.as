@@ -19,13 +19,7 @@ package {
   import com.nodename.Delaunay.Voronoi;
   import de.polygonal.math.PM_PRNG;
 
-  // TODO: add more points near coastlines (shrink beach areas). TODO:
-  // remove ocean points (maybe) (may speed up code). TODO: remove
-  // points that are too close to another point (voronoi edge is very
-  // straight and we can't make it noisy) (also, when corners are too
-  // close together, rivers connect to each other or coastlines
-  // connect to each other)
-  
+  [SWF(width="800", height="600")]
   public class voronoi_set extends Sprite {
     static public var NUM_POINTS:int = 2000;
     static public var SIZE:int = 600;
@@ -1636,6 +1630,27 @@ package {
       islandSeedInput.selectable = true;
       islandSeedInput.type = TextFieldType.INPUT;
 
+      function markActiveIslandShape(type:String):void {
+        mapTypes[islandType].backgroundColor = 0xffffcc;
+        mapTypes[type].backgroundColor = 0xffff00;
+      }
+      
+      function switcher(type:String):Function {
+        return function(e:Event):void {
+          markActiveIslandShape(type);
+          newIsland(type);
+          go();
+        }
+      }
+      
+      var mapTypes:Object = {
+        'Radial': makeButton("Radial", 23, y+44, 40, switcher('Radial')),
+        'Perlin': makeButton("Perlin", 65, y+44, 35, switcher('Perlin')),
+        'Square': makeButton("Square", 102, y+44, 44, switcher('Square')),
+        'Blob': makeButton("Blob", 148, y+44, 30, switcher('Blob'))
+      };
+      markActiveIslandShape(islandType);
+      
       controls.addChild(islandShapeButton);
       controls.addChild(seedLabel);
       controls.addChild(islandSeedInput);
@@ -1645,26 +1660,10 @@ package {
                                      newIsland(islandType);
                                      go();
                                    }));
-      controls.addChild(makeButton("Radial", 23, y+44, 40,
-                                   function (e:Event):void {
-                                     newIsland('Radial');
-                                     go();
-                                   }));
-      controls.addChild(makeButton("Perlin", 65, y+44, 35,
-                                   function (e:Event):void {
-                                     newIsland('Perlin');
-                                     go();
-                                   }));
-      controls.addChild(makeButton("Square", 102, y+44, 44,
-                                   function (e:Event):void {
-                                     newIsland('Square');
-                                     go();
-                                   }));
-      controls.addChild(makeButton("Blob", 148, y+44, 30,
-                                   function (e:Event):void {
-                                     newIsland('Blob');
-                                     go();
-                                   }));
+      controls.addChild(mapTypes.Radial);
+      controls.addChild(mapTypes.Perlin);
+      controls.addChild(mapTypes.Square);
+      controls.addChild(mapTypes.Blob);
       
       controls.addChild(makeButton("Map #", 35, y+66, 40, null));
       mapSeedOutput = makeButton("", 75, y+66, 75, null);
@@ -1674,48 +1673,42 @@ package {
     
     public function addViewButtons():void {
       var y:int = 150;
+
+      function markViewButton(mode:String):void {
+        views[mapMode].backgroundColor = 0xffffcc;
+        views[mode].backgroundColor = 0xffff00;
+      }
+      function switcher(mode:String):Function {
+        return function(e:Event):void {
+          markViewButton(mode);
+          mapMode = mode;
+          drawMap();
+        }
+      }
+      
+      var views:Object = {
+        'biome': makeButton("Biomes", 25, y+22, 74, switcher('biome')),
+        'smooth': makeButton("Smooth", 101, y+22, 74, switcher('smooth')),
+        'slopes': makeButton("2D slopes", 25, y+44, 74, switcher('slopes')),
+        '3d': makeButton("3D slopes", 101, y+44, 74, switcher('3d')),
+        'elevation': makeButton("Elevation", 25, y+66, 74, switcher('elevation')),
+        'moisture': makeButton("Moisture", 101, y+66, 74, switcher('moisture')),
+        'polygons': makeButton("Polygons", 25, y+88, 74, switcher('polygons')),
+        'watersheds': makeButton("Watersheds", 101, y+88, 74, switcher('watersheds'))
+      };
+
+      markViewButton(mapMode);
+      
       controls.addChild(makeButton("View:", 50, y, 100, null));
       
-      controls.addChild(makeButton("Biomes", 25, y+22, 74,
-                          function (e:Event):void {
-                            mapMode = 'biome';
-                            drawMap();
-                          }));
-      controls.addChild(makeButton("Smooth", 101, y+22, 74,
-                          function (e:Event):void {
-                            mapMode = 'smooth';
-                            drawMap();
-                          }));
-      controls.addChild(makeButton("2D slopes", 25, y+44, 74,
-                          function (e:Event):void {
-                            mapMode = 'slopes';
-                            drawMap();
-                          }));
-      controls.addChild(makeButton("3D slopes", 101, y+44, 74,
-                          function (e:Event):void {
-                            mapMode = '3d';
-                            drawMap();
-                          }));
-      controls.addChild(makeButton("Elevation", 25, y+66, 74,
-                          function (e:Event):void {
-                            mapMode = 'elevation';
-                            drawMap();
-                          }));
-      controls.addChild(makeButton("Moisture", 101, y+66, 74,
-                          function (e:Event):void {
-                            mapMode = 'moisture';
-                            drawMap();
-                          }));
-      controls.addChild(makeButton("Polygons", 25, y+88, 74,
-                          function (e:Event):void {
-                            mapMode = 'polygons';
-                            drawMap();
-                          }));
-      controls.addChild(makeButton("Watersheds", 101, y+88, 74,
-                          function (e:Event):void {
-                            mapMode = 'watersheds';
-                            drawMap();
-                          }));
+      controls.addChild(views.biome);
+      controls.addChild(views.smooth);
+      controls.addChild(views.slopes);
+      controls.addChild(views['3d']);
+      controls.addChild(views.elevation);
+      controls.addChild(views.moisture);
+      controls.addChild(views.polygons);
+      controls.addChild(views.watersheds);
     }
 
                
