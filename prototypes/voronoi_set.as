@@ -71,13 +71,16 @@ package {
     // Island shape is controlled by the islandRandom seed and the
     // type of island. The islandShape function uses both of them to
     // determine whether any point should be water or land.
-    public var islandRandom:PM_PRNG = new PM_PRNG(487);
     public var islandType:String = 'Radial';
     public var islandShape:Function;
-    public var islandSeedInput:TextField = makeButton("487", 0, 0, 100, null);
 
     // Island details are controlled by this random generator
-    public var mapRandom:PM_PRNG = new PM_PRNG(487);
+    public var mapRandom:PM_PRNG = new PM_PRNG(Math.random()*100000000);
+
+    // GUI for controlling the map generation and view
+    public var controls:Sprite = new Sprite();
+    public var islandSeedInput:TextField;
+    public var mapSeedOutput:TextField;
 
     // This is the current map style. UI buttons change this, and it
     // persists when you make a new map. The timer is used only when
@@ -103,7 +106,11 @@ package {
 
       addChild(new Debug(this));
 
+      controls.x = SIZE;
+      addChild(controls);
+      
       addExportButtons();
+      addViewButtons();
       addGenerateButtons();
       newIsland(islandType);
       go();
@@ -116,10 +123,21 @@ package {
     
     // Random parameters governing the overall shape of the island
     public function newIsland(type:String):void {
+      if (islandSeedInput.text.length == 0) {
+        islandSeedInput.text = (Math.random()*100000).toFixed(0);
+      }
+      var seed:int = parseInt(islandSeedInput.text);
+      if (seed == 0) {
+        // Convert the string into a number. This is a cheesy way to
+        // do it but it doesn't matter. It just allows people to use
+        // words as seeds.
+        for (var i:int = 0; i < islandSeedInput.text.length; i++) {
+          seed = (seed << 4) | islandSeedInput.text.charCodeAt(i);
+        }
+        seed %= 100000;
+      }
       islandType = type;
-      islandShape = IslandShape['make'+type](islandRandom.seed);
-      islandRandom.nextInt();
-      islandRandom.seed %= 100000;
+      islandShape = IslandShape['make'+type](seed);
     }
 
     
@@ -160,17 +178,18 @@ package {
     public function graphicsReset():void {
       graphics.clear();
       graphics.beginFill(0x555599);
-      graphics.drawRect(0, 0, 600, 2000);
+      graphics.drawRect(0, 0, SIZE, 2000);
       graphics.endFill();
       graphics.beginFill(0xbbbbaa);
-      graphics.drawRect(600, 0, 2000, 2000);
+      graphics.drawRect(SIZE, 0, 2000, 2000);
       graphics.endFill();
     }
 
     
     public function go():void {
       reset();
-
+      mapSeedOutput.text = mapRandom.seed.toString();
+      
       var i:int, j:int, t:Number;
       var p:Point, q:Point, r:Point, s:Point;
       var t0:Number = getTimer();
@@ -1592,113 +1611,128 @@ package {
       button.defaultTextFormat = format;
       button.text = label;
       button.selectable = false;
-      button.background = true;
-      button.backgroundColor = 0xffffcc;
       button.x = x;
       button.y = y;
       button.width = width;
       button.height = 20;
-      if (callback != null) button.addEventListener(MouseEvent.CLICK, callback);
+      if (callback != null) {
+        button.background = true;
+        button.backgroundColor = 0xffffcc;
+        button.addEventListener(MouseEvent.CLICK, callback);
+      }
       return button;
     }
 
     
     public function addGenerateButtons():void {
-      var islandShapeButton:TextField = makeButton("New Island Shape:", 650, 8, 100, null);
-      islandShapeButton.background = false;
-      islandSeedInput.x = 675;
-      islandSeedInput.y = 30;
-      islandSeedInput.width = 50;
+      var y:int = 4;
+      var islandShapeButton:TextField = makeButton("Island Shape:", 25, y, 150, null);
+
+      var seedLabel:TextField = makeButton("Seed #", 25, y+22, 50, null);
+      
+      islandSeedInput = makeButton("5040", 75, y+22, 44, null);
+      islandSeedInput.background = true;
       islandSeedInput.backgroundColor = 0xccddcc;
       islandSeedInput.selectable = true;
       islandSeedInput.type = TextFieldType.INPUT;
+
+      controls.addChild(islandShapeButton);
+      controls.addChild(seedLabel);
+      controls.addChild(islandSeedInput);
+      controls.addChild(makeButton("Random", 121, y+22, 56,
+                                   function (e:Event):void {
+                                     islandSeedInput.text = (Math.random()*100000).toFixed(0);
+                                     newIsland(islandType);
+                                     go();
+                                   }));
+      controls.addChild(makeButton("Radial", 23, y+44, 40,
+                                   function (e:Event):void {
+                                     newIsland('Radial');
+                                     go();
+                                   }));
+      controls.addChild(makeButton("Perlin", 65, y+44, 35,
+                                   function (e:Event):void {
+                                     newIsland('Perlin');
+                                     go();
+                                   }));
+      controls.addChild(makeButton("Square", 102, y+44, 44,
+                                   function (e:Event):void {
+                                     newIsland('Square');
+                                     go();
+                                   }));
+      controls.addChild(makeButton("Blob", 148, y+44, 30,
+                                   function (e:Event):void {
+                                     newIsland('Blob');
+                                     go();
+                                   }));
       
-      addChild(islandShapeButton);
-      addChild(islandSeedInput);
-      addChild(makeButton("Radial", 623, 30, 50,
-                          function (e:Event):void {
-                            newIsland('Radial');
-                            islandSeedInput.text = islandRandom.seed.toString();
-                            go();
-                          }));
-      addChild(makeButton("Perlin", 727, 30, 50,
-                          function (e:Event):void {
-                            newIsland('Perlin');
-                            islandSeedInput.text = islandRandom.seed.toString();
-                            go();
-                          }));
-      addChild(makeButton("Square", 623, 52, 45,
-                          function (e:Event):void {
-                            newIsland('Square');
-                            islandSeedInput.text = "";
-                            go();
-                          }));
-      addChild(makeButton("Same \u267a", 670, 52, 60,
-                          function (e:Event):void {
-                            go();
-                          }));
-      addChild(makeButton("Blob", 732, 52, 45,
-                          function (e:Event):void {
-                            newIsland('Blob');
-                            islandSeedInput.text = "";
-                            go();
-                          }));
+      controls.addChild(makeButton("Map #", 35, y+66, 40, null));
+      mapSeedOutput = makeButton("", 75, y+66, 75, null);
+      controls.addChild(mapSeedOutput);
+    }
+
+    
+    public function addViewButtons():void {
+      var y:int = 150;
+      controls.addChild(makeButton("View:", 50, y, 100, null));
       
-      addChild(makeButton("see biomes", 650, 150, 100,
+      controls.addChild(makeButton("Biomes", 25, y+22, 74,
                           function (e:Event):void {
                             mapMode = 'biome';
                             drawMap();
                           }));
-      addChild(makeButton("see smooth", 650, 180, 100,
+      controls.addChild(makeButton("Smooth", 101, y+22, 74,
                           function (e:Event):void {
                             mapMode = 'smooth';
                             drawMap();
                           }));
-      addChild(makeButton("see slopes", 650, 210, 100,
+      controls.addChild(makeButton("2D slopes", 25, y+44, 74,
                           function (e:Event):void {
                             mapMode = 'slopes';
                             drawMap();
                           }));
-      addChild(makeButton("see elevation", 650, 240, 100,
+      controls.addChild(makeButton("3D slopes", 101, y+44, 74,
+                          function (e:Event):void {
+                            mapMode = '3d';
+                            drawMap();
+                          }));
+      controls.addChild(makeButton("Elevation", 25, y+66, 74,
                           function (e:Event):void {
                             mapMode = 'elevation';
                             drawMap();
                           }));
-      addChild(makeButton("see moisture", 650, 270, 100,
+      controls.addChild(makeButton("Moisture", 101, y+66, 74,
                           function (e:Event):void {
                             mapMode = 'moisture';
                             drawMap();
                           }));
-      addChild(makeButton("see polygons", 650, 300, 100,
+      controls.addChild(makeButton("Polygons", 25, y+88, 74,
                           function (e:Event):void {
                             mapMode = 'polygons';
                             drawMap();
                           }));
-      addChild(makeButton("see watersheds", 650, 330, 100,
+      controls.addChild(makeButton("Watersheds", 101, y+88, 74,
                           function (e:Event):void {
                             mapMode = 'watersheds';
-                            drawMap();
-                          }));
-      addChild(makeButton("see 3d", 650, 360, 100,
-                          function (e:Event):void {
-                            mapMode = '3d';
                             drawMap();
                           }));
     }
 
                
     public function addExportButtons():void {
-      addChild(makeButton("export elevation", 650, 450, 100,
+      controls.addChild(makeButton("Export Bitmaps:", 25, 350, 150, null));
+               
+      controls.addChild(makeButton("Elevation", 50, 372, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('elevation'), 'elevation.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export moisture", 650, 480, 100,
+      controls.addChild(makeButton("Moisture", 50, 394, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('moisture'), 'moisture.data');
                             e.stopPropagation();
                           }));
-      addChild(makeButton("export overrides", 650, 510, 100,
+      controls.addChild(makeButton("Overrides", 50, 416, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('overrides'), 'overrides.data');
                             e.stopPropagation();
