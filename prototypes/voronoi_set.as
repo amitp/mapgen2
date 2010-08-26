@@ -1076,11 +1076,11 @@ package {
     }
 
 
-    // Helper function for color manipulation
-    private function interpolateColor(color1:uint, color2:uint, f:Number):uint {
-      var r:uint = uint((1-f)*(color1 >> 16) + f*(color2 >> 16));
-      var g:uint = uint((1-f)*((color1 >> 8) & 0xff) + f*((color2 >> 8) & 0xff));
-      var b:uint = uint((1-f)*(color1 & 0xff) + f*(color2 & 0xff));
+    // Helper function for color manipulation. When f==0: color0, f==1: color1
+    private function interpolateColor(color0:uint, color1:uint, f:Number):uint {
+      var r:uint = uint((1-f)*(color0 >> 16) + f*(color1 >> 16));
+      var g:uint = uint((1-f)*((color0 >> 8) & 0xff) + f*((color1 >> 8) & 0xff));
+      var b:uint = uint((1-f)*(color0 & 0xff) + f*(color1 & 0xff));
       if (r > 255) r = 255;
       if (g > 255) g = 255;
       if (b > 255) b = 255;
