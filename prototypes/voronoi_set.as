@@ -29,25 +29,32 @@ package {
     static public var NUM_LLOYD_ITERATIONS:int = 2;
     
     static public var displayColors:Object = {
+      // Features
       OCEAN: 0x555599,
       COAST: 0x444477,
       LAKESHORE: 0x225588,
       LAKE: 0x336699,
-      RIVER: 0x336699,
+      RIVER: 0x225588,
       MARSH: 0x2f6666,
       ICE: 0x99ffff,
-      SCORCHED: 0x444433,
-      BARE: 0x666666,
       BEACH: 0xa09077,
+      ROAD: 0x664433,
       LAVA: 0xcc3333,
+
+      // Terrain
       SNOW: 0xffffff,
-      DESERT: 0xc9d29b,
-      SAVANNAH: 0xaabb88,
-      GRASSLANDS: 0x88aa55,
-      DRY_FOREST: 0x679459,
-      RAIN_FOREST: 0x559966,
-      SWAMP: 0x448855,
-      ROAD: 0x664433
+      TUNDRA: 0xbbbbaa,
+      BARE: 0x888888,
+      SCORCHED: 0x555555,
+      TAIGA: 0x99aa77,
+      SHRUBLAND: 0x889977,
+      TEMPERATE_DESERT: 0xc9d29b,
+      TEMPERATE_RAIN_FOREST: 0x448855,
+      TEMPERATE_DECIDUOUS_FOREST: 0x679459,
+      GRASSLAND: 0x88aa55,
+      SUBTROPICAL_DESERT: 0xd2b98b,
+      TROPICAL_RAIN_FOREST: 0x337755,
+      TROPICAL_SEASONAL_FOREST: 0x559944
     };
 
     static public var elevationGradientColors:Object = {
@@ -291,8 +298,8 @@ package {
       
       // Choose polygon biomes based on elevation, water, ocean
       t = getTimer();
-      assignTerrains();
-      Debug.trace("TIME for terrain assignment:", getTimer()-t);
+      assignBiomes();
+      Debug.trace("TIME for biome assignment:", getTimer()-t);
 
 
       // Mark areas in each contour area and place roads along the
@@ -826,8 +833,8 @@ package {
           for each (q in attr[p].neighbors) {
               edge = lookupEdgeFromCenter(p, q);
               if (!attr[edge].river && !attr[p].water && !attr[q].water
-                  && attr[p].elevation > 0.85 && attr[q].elevation > 0.85
-                  && attr[p].moisture < 0.5 && attr[q].moisture < 0.5
+                  && attr[p].elevation > 0.8 && attr[q].elevation > 0.8
+                  && attr[p].moisture < 0.3 && attr[q].moisture < 0.3
                   && mapRandom.nextDouble() < FRACTION_LAVA_FISSURES) {
                 attr[edge].lava = true;
               }
@@ -890,10 +897,12 @@ package {
     }
       
     
-    // Assign a terrain type to each polygon. If it has
-    // ocean/coast/water, then that's the terrain type; otherwise it
-    // depends on low/high elevation and low/medium/high moisture.
-    public function assignTerrains():void {
+    // Assign a biome type to each polygon. If it has
+    // ocean/coast/water, then that's the biome; otherwise it depends
+    // on low/high elevation and low/medium/high moisture. This is
+    // roughly based on the Whittaker diagram but adapted to fit the
+    // needs of the island map generator.
+    public function assignBiomes():void {
       for each (var p:Point in points) {
           var A:Object = attr[p];
           if (A.ocean) {
@@ -904,20 +913,25 @@ package {
             if (A.elevation > 0.85) A.biome = 'ICE';
           } else if (A.coast) {
             A.biome = 'BEACH';
-          } else if (A.elevation > 0.85) {
+          } else if (A.elevation > 0.8) {
             if (A.moisture > 0.5) A.biome = 'SNOW';
-            else if (A.moisture > 0.3) A.biome = 'BARE'; 
+            else if (A.moisture > 0.3) A.biome = 'TUNDRA';
+            else if (A.moisture > 0.1) A.biome = 'BARE';
             else A.biome = 'SCORCHED';
+          } else if (A.elevation > 0.6) {
+            if (A.moisture > 0.6) A.biome = 'TAIGA';
+            else if (A.moisture > 0.3) A.biome = 'SHRUBLAND';
+            else A.biome = 'TEMPERATE_DESERT';
           } else if (A.elevation > 0.3) {
-            if (A.moisture > 0.8) A.biome = 'DRY_FOREST';
-            else if (A.moisture > 0.5) A.biome = 'GRASSLANDS';
-            else if (A.moisture > 0.235) A.biome = 'SAVANNAH';
-            else A.biome = 'DESERT';
+            if (A.moisture > 0.8) A.biome = 'TEMPERATE_RAIN_FOREST';
+            else if (A.moisture > 0.6) A.biome = 'TEMPERATE_DECIDUOUS_FOREST';
+            else if (A.moisture > 0.3) A.biome = 'GRASSLAND';
+            else A.biome = 'TEMPERATE_DESERT';
           } else {
-            if (A.moisture > 0.9) A.biome = 'SWAMP';
-            else if (A.moisture > 0.5) A.biome = 'RAIN_FOREST';
-            else if (A.moisture > 0.235) A.biome = 'GRASSLANDS';
-            else A.biome = 'DESERT';
+            if (A.moisture > 0.8) A.biome = 'TROPICAL_RAIN_FOREST';
+            else if (A.moisture > 0.5) A.biome = 'TROPICAL_SEASONAL_FOREST';
+            else if (A.moisture > 0.3) A.biome = 'GRASSLAND';
+            else A.biome = 'SUBTROPICAL_DESERT';
           }
         }
     }
@@ -1142,7 +1156,7 @@ package {
         for each (p in points) {
             if (attr[p].ocean) continue;
             for each (edge in attr[p].edges) {
-                var color:int = colors[attr[p].biome];
+                var color:int = colors[attr[p].biome] || 0;
                 if (colorFunction != null) {
                   color = colorFunction(color, p, q, edge);
                 }
@@ -1219,7 +1233,7 @@ package {
       for each (p in points) {
           for each (q in attr[p].neighbors) {
               var edge:Edge = lookupEdgeFromCenter(p, q);
-              var color:int = colors[attr[p].biome];
+              var color:int = colors[attr[p].biome] || 0;
               if (colorOverrideFunction != null) {
                 color = colorOverrideFunction(color, p, q, edge);
               }
@@ -1404,7 +1418,7 @@ package {
       var p:Point, edge:Edge;
 
       for each (p in points) {
-          graphics.beginFill(interpolateColor(colors[attr[p].biome], 0xdddddd, 0.2));
+          graphics.beginFill(interpolateColor(colors[attr[p].biome] || 0, 0xdddddd, 0.2));
           for each (edge in attr[p].edges) {
               if (attr[edge].v0 && attr[edge].v1) {
                 graphics.moveTo(p.x, p.y);
@@ -1574,17 +1588,8 @@ package {
       RIVER: 0x10,
       MARSH: 0x10,
       ICE: 0x40,
-      SCORCHED: 0x00,
-      BEACH: 0x00,
-      BARE: 0x00,
       LAVA: 0x20,
       SNOW: 0x30,
-      DESERT: 0x00,
-      SAVANNAH: 0x00,
-      GRASSLANDS: 0x00,
-      DRY_FOREST: 0x00,
-      RAIN_FOREST: 0x00,
-      SWAMP: 0x00,
       ROAD: 0x90
     };
 
