@@ -72,11 +72,11 @@ package {
     // Island shape is controlled by the islandRandom seed and the
     // type of island. The islandShape function uses both of them to
     // determine whether any point should be water or land.
-    public var islandType:String = 'Radial';
+    public var islandType:String = 'Perlin';
     public var islandShape:Function;
 
     // Island details are controlled by this random generator
-    public var mapRandom:PM_PRNG = new PM_PRNG(Math.random()*100000000);
+    public var mapRandom:PM_PRNG = new PM_PRNG(100);
 
     // GUI for controlling the map generation and view
     public var controls:Sprite = new Sprite();
@@ -1668,7 +1668,7 @@ package {
     public function makeButton(label:String, x:int, y:int, width:int, callback:Function):TextField {
       var button:TextField = new TextField();
       var format:TextFormat = new TextFormat();
-      format.font = "Arial Unicode MS";
+      format.font = "Arial";
       format.align = 'center';
       button.defaultTextFormat = format;
       button.text = label;
@@ -1690,7 +1690,7 @@ package {
       var y:int = 4;
       var islandShapeButton:TextField = makeButton("Island Shape:", 25, y, 150, null);
 
-      var seedLabel:TextField = makeButton("Seed #", 25, y+22, 50, null);
+      var seedLabel:TextField = makeButton("Shape #", 25, y+22, 50, null);
       
       islandSeedInput = makeButton("5040", 75, y+22, 44, null);
       islandSeedInput.background = true;
@@ -1715,7 +1715,7 @@ package {
         'Radial': makeButton("Radial", 23, y+44, 40, switcher('Radial')),
         'Perlin': makeButton("Perlin", 65, y+44, 35, switcher('Perlin')),
         'Square': makeButton("Square", 102, y+44, 44, switcher('Square')),
-        'Blob': makeButton("Blob", 148, y+44, 30, switcher('Blob'))
+        'Blob': makeButton("Blob", 148, y+44, 29, switcher('Blob'))
       };
       markActiveIslandShape(islandType);
       
