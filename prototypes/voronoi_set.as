@@ -75,7 +75,10 @@ package {
     public var islandType:String = 'Perlin';
     public var islandShape:Function;
 
-    // Island details are controlled by this random generator
+    // Island details are controlled by this random generator. The
+    // initial map upon loading is always deterministic, but
+    // subsequent maps reset this random number generator with a
+    // random seed.
     public var mapRandom:PM_PRNG = new PM_PRNG(100);
 
     // GUI for controlling the map generation and view
@@ -90,10 +93,9 @@ package {
     public var render3dTimer:Timer = new Timer(1000/20, 0);
     
     // These store the graph data
-    public var voronoi:Voronoi;
-    public var points:Vector.<Point>;
-    public var corners:Vector.<Point>;
-    public var attr:Dictionary;
+    public var centers:Vector.<Center>;
+    public var corners:Vector.<Corner>;
+    public var edges:Vector.<Edge>;
 
     // These store 3d rendering data
     private var rotationAnimation:Number = 0.0;
@@ -143,33 +145,41 @@ package {
 
     
     public function reset():void {
-      // Break cycles before we remove the reference to attr;
-      // otherwise the garbage collector won't release it.
-      if (attr) {
-        for (var key:Object in attr) {
-          delete attr[key];
-        }
+      var p:Center, q:Corner, edge:Edge;
+      // Break cycles so the garbage collector will release data.
+      if (edges) {
+        for each (edge in edges) {
+            edge.d0 = edge.d1 = null;
+            edge.v0 = edge.v1 = null;
+          }
+        edges.splice(0, edges.length);
       }
-      if (points) {
-        points.splice(0, points.length);
+      if (centers) {
+        for each (p in centers) {
+            p.neighbors.splice(0, p.neighbors.length);
+            p.corners.splice(0, p.corners.length);
+            p.edges.splice(0, p.edges.length);
+          }
+        centers.splice(0, centers.length);
       }
       if (corners) {
+        for each (q in corners) {
+            q.neighbors.splice(0, q.neighbors.length);
+            q.corners.splice(0, q.corners.length);
+            q.edges.splice(0, q.edges.length);
+            q.downslope = null;
+            q.watershed = null;
+          }
         corners.splice(0, corners.length);
-      }
-      if (voronoi) {
-        voronoi.dispose();
-        voronoi = null;
       }
 
       // Reset the 3d triangle data
       triangles3d = [];
       
-      // Clear the previous graph data. We'll reuse attr and points
-      // when we can, but there's no easy way to reuse the Voronoi
-      // object, so we'll allocate a new one.
-      if (!attr) attr = new Dictionary(true);
-      if (!points) points = new Vector.<Point>();
-      if (!corners) corners = new Vector.<Point>();
+      // Clear the previous graph data.
+      if (!edges) edges = new Vector.<Edge>();
+      if (!centers) centers = new Vector.<Center>();
+      if (!corners) corners = new Vector.<Corner>();
       
       System.gc();
       Debug.trace("MEMORY BEFORE:", System.totalMemory);
@@ -192,25 +202,25 @@ package {
       mapSeedOutput.text = mapRandom.seed.toString();
       
       var i:int, j:int, t:Number;
-      var p:Point, q:Point, r:Point, s:Point;
+      var p:Center, q:Corner, r:Center, s:Corner, point:Point;
       var t0:Number = getTimer();
 
       
       // Generate the initial random set of points
       t = getTimer();
-      generateRandomPoints();
+      var points:Vector.<Point> = generateRandomPoints();
       Debug.trace("TIME for random points:", getTimer()-t);
 
 
       // Improve the quality of that set by spacing them better
       t = getTimer();
-      improveRandomPoints();
+      improveRandomPoints(points);
       Debug.trace("TIME for improving point set:", getTimer()-t);
 
       
       // Build the Voronoi structure with our random points
       t = getTimer();
-      voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
+      var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
       Debug.trace("TIME for voronoi:", getTimer()-t);
 
 
@@ -222,7 +232,9 @@ package {
       // to the edge, a map from these four points to the points
       // they connect to (both along the edge and crosswise).
       t = getTimer();
-      buildGraph();
+      buildGraph(points, voronoi);
+      voronoi.dispose();
+      voronoi = null;
       Debug.trace("TIME for buildGraph:", getTimer()-t);
       
       
@@ -247,17 +259,18 @@ package {
       // center of a perfectly circular island.
       t = getTimer();
 
-      var landPoints:Vector.<Point> = new Vector.<Point>();  // only non-ocean
-      for each (p in corners) {
-          if (attr[p].ocean || attr[p].coast) {
-            attr[p].elevation = 0.0;
+      var landPoints:Vector.<Corner> = new Vector.<Corner>();  // only non-ocean
+      for each (q in corners) {
+          if (q.ocean || q.coast) {
+            q.elevation = 0.0;
           } else {
-            landPoints.push(p);
+            landPoints.push(q);
           }
         }
       for (i = 0; i < 10; i++) {
         redistributeElevations(landPoints);
       }
+      landPoints.splice(0, landPoints.length);
       Debug.trace("TIME for elevation rescaling:", getTimer()-t);
 
       
@@ -318,7 +331,7 @@ package {
       // lines from the polygon centers to the midpoints, because
       // they're not needed for polygon filling.
       t = getTimer();
-      buildNoisyEdges(points, attr);
+      buildNoisyEdges();
       Debug.trace("TIME for noisy edge construction:", getTimer()-t);
 
 
@@ -336,21 +349,19 @@ package {
     // in the water. Some water points are inland lakes; others are
     // ocean. We'll determine ocean later by looking at what's
     // connected to ocean.
-    public function generateRandomPoints():void {
-      var p:Point, i:int;
+    public function generateRandomPoints():Vector.<Point> {
+      var p:Point, i:int, points:Vector.<Point> = new Vector.<Point>();
       for (i = 0; i < NUM_POINTS; i++) {
         p = new Point(mapRandom.nextDoubleRange(10, SIZE-10),
                       mapRandom.nextDoubleRange(10, SIZE-10));
         points.push(p);
-        attr[p] = {
-          type: 'v'
-        };
       }
+      return points;
     }
 
     
     // Improve the random set of points with Lloyd Relaxation.
-    public function improveRandomPoints():void {
+    public function improveRandomPoints(points:Vector.<Point>):void {
       // We'd really like to generate "blue noise". Algorithms:
       // 1. Poisson dart throwing: check each new point against all
       //     existing points, and reject it if it's too close.
@@ -367,9 +378,6 @@ package {
         voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
         for each (p in points) {
             region = voronoi.region(p);
-            // NOTE: The attr[] dictionary is indexed on the identity
-            // of the Point, not its coordinates, and this step occurs
-            // early enough that it's safe to modify the coordinates.
             p.x = 0.0;
             p.y = 0.0;
             for each (q in region) {
@@ -385,110 +393,132 @@ package {
     }
     
     
-    // Build graph data structure in the 'attr' objects, based on
-    // information in the Voronoi results: attr[point].neighbors will
-    // be a list of neighboring points of the same type (corner or
-    // center); attr[point].edges will be a list of edges that include
-    // that point; attr[point].type will be 'd' if it's a Delaunay
-    // triangle center and 'v' if it's a Voronoi polygon center. Each
-    // edge connects to four points: the Voronoi edge
-    // attr[edge].{v0,v1} and its dual Delaunay triangle edge
-    // attr[edge].{d0,d1}.  Also, attr[edge].type is 'e'. For boundary
-    // polygons, the Delaunay edge will have one null point, and the
-    // Voronoi edge may be null.
-    public function buildGraph():void {
-      var point:Point, other:Point;
-      var edges:Vector.<Edge> = voronoi.edges();
+    // Build graph data structure in 'edges', 'centers', 'corners',
+    // based on information in the Voronoi results: point.neighbors
+    // will be a list of neighboring points of the same type (corner
+    // or center); point.edges will be a list of edges that include
+    // that point. Each edge connects to four points: the Voronoi edge
+    // edge.{v0,v1} and its dual Delaunay triangle edge edge.{d0,d1}.
+    // For boundary polygons, the Delaunay edge will have one null
+    // point, and the Voronoi edge may be null.
+    public function buildGraph(points:Vector.<Point>, voronoi:Voronoi):void {
+      var p:Center, q:Corner, point:Point, other:Point;
+      var libedges:Vector.<com.nodename.Delaunay.Edge> = voronoi.edges();
+      var centerLookup:Dictionary = new Dictionary();
+
+      // Build Center objects for each of the points, and a lookup map
+      // to find those Center objects again as we build the graph
+      for each (point in points) {
+          p = new Center();
+          p.index = centers.length;
+          p.point = point;
+          p.edges = new Vector.<Edge>();
+          p.neighbors = new  Vector.<Center>();
+          p.corners = new Vector.<Corner>();
+          centers.push(p);
+          centerLookup[point] = p;
+        }
       
       // Workaround for Voronoi lib bug: we need to call region()
       // before Edges or neighboringSites are available
-      for each (point in points) {
-          voronoi.region(point);
+      for each (p in centers) {
+          voronoi.region(p.point);
         }
       
-      // Build the graph skeleton for the polygon centers
-      for each (point in points) {
-          attr[point].edges = new Vector.<Edge>();
-          attr[point].neighbors = new  Vector.<Point>();
-          attr[point].corners = new Vector.<Point>();
-        }
-
-      // Workaround: the Voronoi library will allocate multiple corner
-      // Point objects; we need to put them into the corners list only
-      // once, so that we can use these points in a Dictionary.  To
-      // make lookup fast, we keep an array of points, bucketed by x
-      // value, and then we only have to look at other points in
-      // nearby buckets.
+      // The Voronoi library generates multiple Point objects for
+      // corners, and we need to canonicalize to one Corner object.
+      // To make lookup fast, we keep an array of Points, bucketed by
+      // x value, and then we only have to look at other Points in
+      // nearby buckets. When we fail to find one, we'll create a new
+      // Corner object.
       var _cornerMap:Array = [];
-      function makeCorner(p:Point):Point {
-        if (p == null) return p;
-        for (var bucket:int = int(p.x)-1; bucket <= int(p.x)+1; bucket++) {
-          for each (var q:Point in _cornerMap[bucket]) {
-              var dx:Number = p.x - q.x;
-              var dy:Number = p.y - q.y;
+      function makeCorner(point:Point):Corner {
+        var q:Corner;
+        
+        if (point == null) return null;
+        for (var bucket:int = int(point.x)-1; bucket <= int(point.x)+1; bucket++) {
+          for each (q in _cornerMap[bucket]) {
+              var dx:Number = point.x - q.point.x;
+              var dy:Number = point.y - q.point.y;
               if (dx*dx + dy*dy < 1e-6) {
                 return q;
               }
             }
         }
-        bucket = int(p.x);
+        bucket = int(point.x);
         if (!_cornerMap[bucket]) _cornerMap[bucket] = [];
-        _cornerMap[bucket].push(p);
-        return p;
+        q = new Corner();
+        q.index = corners.length;
+        corners.push(q);
+        q.point = point;
+        q.edges = new Vector.<Edge>();
+        q.neighbors = new Vector.<Corner>();
+        q.corners = new Vector.<Center>();
+        _cornerMap[bucket].push(q);
+        return q;
       }
     
-      function fillAttr(edge:Edge, points:Array, duals:Array):void {
-        var point:Point, other:Point;
-        for each (point in points) {
-            var A:Object = attr[point];
-            A.edges.push(edge);
-            for each (other in points) {
-                if (point != other) A.neighbors.push(other);
-              }
-            for each (other in duals) {
-                if (A.corners.indexOf(other) < 0) A.corners.push(other);
-              }
-          }
-      }
+      for each (var libedge:com.nodename.Delaunay.Edge in libedges) {
+          var dedge:LineSegment = libedge.delaunayLine();
+          var vedge:LineSegment = libedge.voronoiEdge();
 
-      for each (var edge:Edge in edges) {
-          var dedge:LineSegment = edge.delaunayLine();
-          var vedge:LineSegment = edge.voronoiEdge();
+          // Fill the graph data. Make an Edge object corresponding to
+          // the edge from the voronoi library.
+          var edge:Edge = new Edge();
+          edge.index = edges.length;
+          edges.push(edge);
+          edge.midpoint = vedge.p0 && vedge.p1 && Point.interpolate(vedge.p0, vedge.p1, 0.5);
 
-          // The Voronoi library generates multiple Point objects for
-          // corners, and we need to have just one so we can index.
-          vedge.p0 = makeCorner(vedge.p0);
-          vedge.p1 = makeCorner(vedge.p1);
-          
-          // Build the graph skeleton for the corners
-          for each (point in [vedge.p0, vedge.p1]) {
-              if (point != null && attr[point] == null) {
-                corners.push(point);
-                attr[point] = {
-                  type: 'd',
-                  edges: new Vector.<Edge>(),
-                  neighbors: new Vector.<Point>(),
-                  corners: new Vector.<Point>()
-                };
-              }
+          // Edges point to corners. Edges point to centers. 
+          edge.v0 = makeCorner(vedge.p0);
+          edge.v1 = makeCorner(vedge.p1);
+          edge.d0 = centerLookup[dedge.p0];
+          edge.d1 = centerLookup[dedge.p1];
+
+          // Centers point to edges. Corners point to edges.
+          if (edge.d0 != null) { edge.d0.edges.push(edge); }
+          if (edge.d1 != null) { edge.d1.edges.push(edge); }
+          if (edge.v0 != null) { edge.v0.edges.push(edge); }
+          if (edge.v1 != null) { edge.v1.edges.push(edge); }
+
+          function addToCornerList(v:Vector.<Corner>, x:Corner):void {
+            if (x != null && v.indexOf(x) < 0) { v.push(x); }
           }
-          // Fill the graph data for polygons and corners
-          var vpoints:Array = [];
-          var dpoints:Array = [];
-          if (dedge.p0 != null) vpoints.push(dedge.p0);
-          if (dedge.p1!= null) vpoints.push(dedge.p1);
-          if (vedge.p0 != null) dpoints.push(vedge.p0);
-          if (vedge.p1 != null) dpoints.push(vedge.p1);
-          fillAttr(edge, dpoints, vpoints);
-          fillAttr(edge, vpoints, dpoints);
+          function addToCenterList(v:Vector.<Center>, x:Center):void {
+            if (x != null && v.indexOf(x) < 0) { v.push(x); }
+          }
           
-          // Per edge attributes
-          attr[edge] = {type: 'e'};
-          attr[edge].v0 = vedge.p0;
-          attr[edge].v1 = vedge.p1;
-          attr[edge].d0 = dedge.p0;
-          attr[edge].d1 = dedge.p1;
-          attr[edge].midpoint = vedge.p0 && vedge.p1 && Point.interpolate(vedge.p0, vedge.p1, 0.5);
+          // Centers point to centers.
+          if (edge.d0 != null && edge.d1 != null) {
+            addToCenterList(edge.d0.neighbors, edge.d1);
+            addToCenterList(edge.d1.neighbors, edge.d0);
+          }
+
+          // Corners point to corners
+          if (edge.v0 != null && edge.v1 != null) {
+            addToCornerList(edge.v0.neighbors, edge.v1);
+            addToCornerList(edge.v1.neighbors, edge.v0);
+          }
+
+          // Centers point to corners
+          if (edge.d0 != null) {
+            addToCornerList(edge.d0.corners, edge.v0);
+            addToCornerList(edge.d0.corners, edge.v1);
+          }
+          if (edge.d1 != null) {
+            addToCornerList(edge.d1.corners, edge.v0);
+            addToCornerList(edge.d1.corners, edge.v1);
+          }
+
+          // Corners point to centers
+          if (edge.v0 != null) {
+            addToCenterList(edge.v0.corners, edge.d0);
+            addToCenterList(edge.v0.corners, edge.d1);
+          }
+          if (edge.v1 != null) {
+            addToCenterList(edge.v1.corners, edge.d0);
+            addToCenterList(edge.v1.corners, edge.d1);
+          }
         }
     }
 
@@ -502,19 +532,21 @@ package {
     // often end up on river paths because they don't raise the
     // elevation as much as other terrain does.
     public function assignCornerElevations():void {
-      var p:Point, q:Point;
+      var q:Corner, s:Corner;
       var queue:Array = [];
       
-      for each (p in corners) {
-          attr[p].water = !inside(p);
+      for each (q in corners) {
+          q.water = !inside(q.point);
         }
 
-      for each (p in corners) {
+      for each (q in corners) {
           // The edges of the map are elevation 0
-          if (p.x == 0 || p.x == SIZE || p.y == 0 || p.y == SIZE) {
-            attr[p].elevation = 0.0;
-            attr[p].border = true;
-            queue.push(p);
+          if (q.point.x == 0 || q.point.x == SIZE || q.point.y == 0 || q.point.y == SIZE) {
+            q.elevation = 0.0;
+            q.border = true;
+            queue.push(q);
+          } else {
+            q.elevation = Infinity;
           }
         }
       // Traverse the graph and assign elevations to each point. As we
@@ -522,21 +554,21 @@ package {
       // guarantees that rivers always have a way down to the coast by
       // going downhill (no local minima).
       while (queue.length > 0) {
-        p = queue.shift();
+        q = queue.shift();
 
-        for each (q in attr[p].neighbors) {
+        for each (s in q.neighbors) {
             // Every step up is epsilon over water or 1 over land. The
             // number doesn't matter because we'll rescale the
             // elevations later.
-            var newElevation:Number = 0.01 + attr[p].elevation;
-            if (!attr[q].water && !attr[p].water) {
+            var newElevation:Number = 0.01 + q.elevation;
+            if (!s.water && !s.water) {
               newElevation += 1;
             }
             // If this point changed, we'll add it to the queue so
             // that we can process its neighbors too.
-            if (attr[q].elevation == null || newElevation < attr[q].elevation) {
-              attr[q].elevation = newElevation;
-              queue.push(q);
+            if (newElevation < s.elevation) {
+              s.elevation = newElevation;
+              queue.push(s);
             }
           }
       }
@@ -551,23 +583,23 @@ package {
     // compute the cumulative sum, then try to make that match the
     // desired cumulative sum. The desired cumulative sum is the
     // integral of the desired frequency distribution.
-    public function redistributeElevations(points:Vector.<Point>):void {
+    public function redistributeElevations(points:Vector.<Corner>):void {
       var maxElevation:int = 20;
       var M:Number = 1+maxElevation;
-      var p:Point, i:int, x:Number, x0:Number, x1:Number, f:Number, y0:Number, y1:Number;
+      var q:Corner, i:int, x:Number, x0:Number, x1:Number, f:Number, y0:Number, y1:Number;
       var histogram:Array = [];
 
       // First, rescale the points so that none is greater than maxElevation
       x = 1.0;
-      for each (p in points) {
-          if (attr[p].elevation > x) {
-            x = attr[p].elevation;
+      for each (q in points) {
+          if (q.elevation > x) {
+            x = q.elevation;
           }
         }
       // As we rescale, build a histogram of the resulting elevations
-      for each (p in points) {
-          attr[p].elevation *= maxElevation / x;
-          i = int(Math.floor(attr[p].elevation));
+      for each (q in points) {
+          q.elevation *= maxElevation / x;
+          i = int(Math.floor(q.elevation));
           histogram[i] = (histogram[i] || 0) + 1;
         }
 
@@ -613,8 +645,8 @@ package {
           return x/maxElevation;
       }
       
-      for each (p in points) {
-          attr[p].elevation = remap(attr[p].elevation);
+      for each (q in points) {
+          q.elevation = remap(q.elevation);
         }
     }
 
@@ -628,31 +660,30 @@ package {
       // in the second pass, mark any water-containing polygon
       // connected an ocean as ocean.
       var queue:Array = [];
-      var p:Point, q:Point;
+      var p:Center, q:Corner, r:Center;
       
-      for each (p in points) {
-          for each (q in attr[p].corners) {
-              if (attr[q].border) {
-                attr[p].border = true;
-                attr[p].ocean = true;
-                attr[q].water = true;
+      for each (p in centers) {
+          for each (q in p.corners) {
+              if (q.border) {
+                p.border = true;
+                p.ocean = true;
+                q.water = true;
                 queue.push(p);
               }
-              if (attr[q].water) {
-                attr[p].water = (attr[p].water || 0) + 1;
+              if (q.water) {
+                p.water = (p.water || 0) + 1;
               }
             }
-          if (!attr[p].ocean && attr[p].water
-              && attr[p].water < attr[p].corners.length * LAKE_THRESHOLD) {
-            delete attr[p].water;
+          if (!p.ocean && p.water < p.corners.length * LAKE_THRESHOLD) {
+            p.water = 0;
           }
         }
       while (queue.length > 0) {
         p = queue.shift();
-        for each (q in attr[p].neighbors) {
-            if (attr[q].water && !attr[q].ocean) {
-              attr[q].ocean = true;
-              queue.push(q);
+        for each (r in p.neighbors) {
+            if (r.water && !r.ocean) {
+              r.ocean = true;
+              queue.push(r);
             }
           }
       }
@@ -660,14 +691,14 @@ package {
       // Set the polygon attribute 'coast' based on its neighbors. If
       // it has at least one ocean and at least one land neighbor,
       // then this is a coastal polygon.
-      for each (p in points) {
+      for each (p in centers) {
           var numOcean:int = 0;
           var numLand:int = 0;
-          for each (q in attr[p].neighbors) {
-              numOcean += int(attr[q].ocean);
-              numLand += int(!attr[q].water);
+          for each (r in p.neighbors) {
+              numOcean += int(r.ocean);
+              numLand += int(!r.water);
             }
-          attr[p].coast = (numOcean > 0) && (numLand > 0);
+          p.coast = (numOcean > 0) && (numLand > 0);
         }
 
 
@@ -675,29 +706,29 @@ package {
       // attributes. If all polygons connected to this corner are
       // ocean, then it's ocean; if all are land, then it's land;
       // otherwise it's coast.
-      for each (p in corners) {
+      for each (q in corners) {
           numOcean = 0;
           numLand = 0;
-          for each (q in attr[p].corners) {
-              numOcean += int(attr[q].ocean);
-              numLand += int(!attr[q].water);
+          for each (p in q.corners) {
+              numOcean += int(p.ocean);
+              numLand += int(!p.water);
             }
-          attr[p].ocean = (numOcean == attr[p].corners.length);
-          attr[p].coast = (numOcean > 0) && (numLand > 0);
-          attr[p].water = attr[p].border || ((numLand != attr[p].corners.length) && !attr[p].coast);
+          q.ocean = (numOcean == q.corners.length);
+          q.coast = (numOcean > 0) && (numLand > 0);
+          q.water = q.border || ((numLand != q.corners.length) && !q.coast);
         }
     }
   
 
     // Polygon elevations are the average of the elevations of their corners.
     public function assignPolygonElevations():void {
-      var p:Point, q:Point, sumElevation:Number;
-      for each (p in points) {
+      var p:Center, q:Corner, sumElevation:Number;
+      for each (p in centers) {
           sumElevation = 0.0;
-          for each (q in attr[p].corners) {
-              sumElevation += attr[q].elevation;
+          for each (q in p.corners) {
+              sumElevation += q.elevation;
             }
-          attr[p].elevation = sumElevation / attr[p].corners.length;
+          p.elevation = sumElevation / p.corners.length;
         }
     }
 
@@ -706,16 +737,16 @@ package {
     // point downstream from it, or to itself.  This is used for
     // generating rivers and watersheds.
     public function calculateDownslopes():void {
-      var p:Point, q:Point, r:Point;
+      var q:Corner, s:Corner, r:Corner;
       
-      for each (p in corners) {
-          r = p;
-          for each (q in attr[p].neighbors) {
-              if (attr[q].elevation <= attr[r].elevation) {
-                r = q;
+      for each (q in corners) {
+          r = q;
+          for each (s in q.neighbors) {
+              if (s.elevation <= r.elevation) {
+                r = s;
               }
             }
-          attr[p].downslope = r;
+          q.downslope = r;
         }
     }
 
@@ -726,13 +757,13 @@ package {
     // more useful to compute them on polygon centers so that every
     // polygon can be marked as being in one watershed.
     public function calculateWatersheds():int {
-      var p:Point, q:Point, i:int, changed:Boolean;
+      var q:Corner, r:Corner, i:int, changed:Boolean;
       
       // Initially the watershed pointer points downslope one step.      
-      for each (p in corners) {
-          attr[p].watershed = p;
-          if (!attr[p].ocean && !attr[p].coast) {
-            attr[p].watershed = attr[p].downslope;
+      for each (q in corners) {
+          q.watershed = q;
+          if (!q.ocean && !q.coast) {
+            q.watershed = q.downslope;
           }
         }
       // Follow the downslope pointers to the coast. Limit to 100
@@ -742,19 +773,19 @@ package {
       // p.watershed.watershed instead of p.downslope.watershed.
       for (i = 0; i < 100; i++) {
         changed = false;
-        for each (p in corners) {
-            if (!attr[p].ocean && !attr[p].coast && !attr[attr[p].watershed].coast) {
-              q = attr[attr[p].downslope].watershed;
-              if (!attr[q].ocean) attr[p].watershed = q;
+        for each (q in corners) {
+            if (!q.ocean && !q.coast && !q.watershed.coast) {
+              r = q.downslope.watershed;
+              if (!r.ocean) q.watershed = r;
               changed = true;
             }
           }
         if (!changed) break;
       }
       // How big is each watershed?
-      for each (p in corners) {
-          q = attr[p].watershed;
-          attr[q].watershed_size = 1 + (attr[q].watershed_size || 0);
+      for each (q in corners) {
+          r = q.watershed;
+          r.watershed_size = 1 + (r.watershed_size || 0);
         }
       return i;
     }
@@ -763,22 +794,22 @@ package {
     // Create rivers along edges. Pick a random corner point, then
     // move downslope. Mark the edges and corners as rivers.
     public function createRivers():void {
-      var i:int, p:Point, edge:Edge;
+      var i:int, q:Corner, edge:Edge;
       
       for (i = 0; i < SIZE/2; i++) {
-        p = corners[mapRandom.nextIntRange(0, corners.length-1)];
-        if (attr[p].ocean || attr[p].elevation < 0.3 || attr[p].elevation > 0.9) continue;
-        // Bias rivers to go west: if (attr[p].downslope.x > p.x) continue;
-        while (!attr[p].coast) {
-          if (p == attr[p].downslope) {
-            Debug.trace("Downslope failed", attr[p].elevation);
+        q = corners[mapRandom.nextIntRange(0, corners.length-1)];
+        if (q.ocean || q.elevation < 0.3 || q.elevation > 0.9) continue;
+        // Bias rivers to go west: if (q.downslope.x > q.x) continue;
+        while (!q.coast) {
+          if (q == q.downslope) {
+            Debug.trace("Downslope failed", q.elevation);
             break;
           }
-          edge = lookupEdgeFromCorner(p, attr[p].downslope);
-          attr[edge].river = (attr[edge].river || 0) + 1;
-          attr[p].river = (attr[p].river || 0) + 1;
-          attr[attr[p].downslope].river = (attr[attr[p].downslope].river || 0) + 1;
-          p = attr[p].downslope;
+          edge = lookupEdgeFromCorner(q, q.downslope);
+          edge.river = (edge.river || 0) + 1;
+          q.river = (q.river || 0) + 1;
+          q.downslope.river = (q.downslope.river || 0) + 1;
+          q = q.downslope;
         }
       }
     }
@@ -791,55 +822,55 @@ package {
     // and it's not clear how they should be adjusted for other
     // scales. Redistributing moisture might be the simplest solution.
     public function calculateMoisture():void {
-      var p:Point, q:Point, sumMoisture:Number;
+      var p:Center, q:Corner, r:Corner, sumMoisture:Number;
       var queue:Array = [];
       // Fresh water
-      for each (p in corners) {
-          if ((attr[p].water || attr[p].river) && !attr[p].ocean) {
-            attr[p].moisture = attr[p].river? Math.min(1.8, (0.2 * attr[p].river)) : 1.0;
-            queue.push(p);
+      for each (q in corners) {
+          if ((q.water || q.river) && !q.ocean) {
+            q.moisture = q.river? Math.min(1.8, (0.2 * q.river)) : 1.0;
+            queue.push(q);
           } else {
-            attr[p].moisture = 0.0;
+            q.moisture = 0.0;
           }
         }
       while (queue.length > 0) {
-        p = queue.shift();
+        q = queue.shift();
 
-        for each (q in attr[p].neighbors) {
-            var newMoisture:Number = attr[p].moisture * 0.85;
-            if (newMoisture > attr[q].moisture) {
-              attr[q].moisture = newMoisture;
-              queue.push(q);
+        for each (r in q.neighbors) {
+            var newMoisture:Number = q.moisture * 0.85;
+            if (newMoisture > r.moisture) {
+              r.moisture = newMoisture;
+              queue.push(r);
             }
           }
       }
       // Salt water
-      for each (p in corners) {
-          if (attr[p].ocean) attr[p].moisture = 1.0;
+      for each (q in corners) {
+          if (q.ocean) q.moisture = 1.0;
         }
       // Polygon moisture is the average of the moisture at corners
-      for each (p in points) {
+      for each (p in centers) {
           sumMoisture = 0.0;
-          for each (q in attr[p].corners) {
-              if (attr[q].moisture > 1.0) attr[q].moisture = 1.0;
-              sumMoisture += attr[q].moisture;
+          for each (q in p.corners) {
+              if (q.moisture > 1.0) q.moisture = 1.0;
+              sumMoisture += q.moisture;
             }
-          attr[p].moisture = sumMoisture / attr[p].corners.length;
+          p.moisture = sumMoisture / p.corners.length;
         }
     }
 
 
     // Lava fissures are at high elevations where moisture is low
     public function createLava():void {
-      var edge:Edge, p:Point, q:Point;
-      for each (p in points) {
-          for each (q in attr[p].neighbors) {
-              edge = lookupEdgeFromCenter(p, q);
-              if (!attr[edge].river && !attr[p].water && !attr[q].water
-                  && attr[p].elevation > 0.8 && attr[q].elevation > 0.8
-                  && attr[p].moisture < 0.3 && attr[q].moisture < 0.3
+      var edge:Edge, p:Center, s:Center;
+      for each (p in centers) {
+          for each (s in p.neighbors) {
+              edge = lookupEdgeFromCenter(p, s);
+              if (!edge.river && !p.water && !s.water
+                  && p.elevation > 0.8 && s.elevation > 0.8
+                  && p.moisture < 0.3 && s.moisture < 0.3
                   && mapRandom.nextDouble() < FRACTION_LAVA_FISSURES) {
-                attr[edge].lava = true;
+                edge.lava = true;
               }
             }
         }
@@ -855,45 +886,45 @@ package {
       // K.  (2) Anything not assigned a contour level, and connected
       // to contour level K, gets contour level K+1.
       var queue:Array = [];
-      var p:Point, q:Point, edge:Edge, newLevel:int;
+      var p:Center, q:Corner, r:Center, edge:Edge, newLevel:int;
       var elevationThresholds:Array = [0, 0.05, 0.25, 0.55, 1.0];
 
-      for each (p in points) {
-          if (attr[p].coast || attr[p].ocean) {
-            attr[p].contour = 1;
+      for each (p in centers) {
+          if (p.coast || p.ocean) {
+            p.contour = 1;
             queue.push(p);
           }
         }
       while (queue.length > 0) {
         p = queue.shift();
-        for each (q in attr[p].neighbors) {
-            newLevel = attr[p].contour || 0;
-            while (attr[q].elevation > elevationThresholds[newLevel] && !attr[q].water) {
+        for each (r in p.neighbors) {
+            newLevel = p.contour || 0;
+            while (r.elevation > elevationThresholds[newLevel] && !r.water) {
               // NOTE: extend the contour line past bodies of
               // water so that roads don't terminate inside lakes.
               newLevel += 1;
             }
-            if (newLevel < (attr[q].contour || 999)) {
-              attr[q].contour = newLevel;
-              queue.push(q);
+            if (newLevel < (r.contour || 999)) {
+              r.contour = newLevel;
+              queue.push(r);
             }
           }
       }
 
       // A corner's contour level is the MIN of its polygons
-      for each (p in points) {
-          for each (q in attr[p].corners) {
-              attr[q].contour = Math.min(attr[q].contour || 999, attr[p].contour || 999);
+      for each (p in centers) {
+          for each (q in p.corners) {
+              q.contour = Math.min(q.contour || 999, p.contour || 999);
             }
         }
 
       // Roads go between polygons that have different contour levels
-      for each (p in points) {
-          for each (edge in attr[p].edges) {
-              if (attr[edge].v0 && attr[edge].v1
-                  && attr[attr[edge].v0].contour != attr[attr[edge].v1].contour) {
-                attr[edge].road = true;
-                attr[p].road_connections = (attr[p].road_connections || 0) + 1;
+      for each (p in centers) {
+          for each (edge in p.edges) {
+              if (edge.v0 && edge.v1
+                  && edge.v0.contour != edge.v1.contour) {
+                edge.road = true;
+                p.road_connections = (p.road_connections || 0) + 1;
               }
             }
         }
@@ -906,35 +937,35 @@ package {
     // roughly based on the Whittaker diagram but adapted to fit the
     // needs of the island map generator.
     public function assignBiomes():void {
-      for each (var p:Point in points) {
-          var A:Object = attr[p];
-          if (A.ocean) {
-            A.biome = 'OCEAN';
-          } else if (A.water) {
-            A.biome = 'LAKE';
-            if (A.elevation < 0.1) A.biome = 'MARSH';
-            if (A.elevation > 0.85) A.biome = 'ICE';
-          } else if (A.coast) {
-            A.biome = 'BEACH';
-          } else if (A.elevation > 0.8) {
-            if (A.moisture > 0.5) A.biome = 'SNOW';
-            else if (A.moisture > 0.3) A.biome = 'TUNDRA';
-            else if (A.moisture > 0.1) A.biome = 'BARE';
-            else A.biome = 'SCORCHED';
-          } else if (A.elevation > 0.6) {
-            if (A.moisture > 0.6) A.biome = 'TAIGA';
-            else if (A.moisture > 0.3) A.biome = 'SHRUBLAND';
-            else A.biome = 'TEMPERATE_DESERT';
-          } else if (A.elevation > 0.3) {
-            if (A.moisture > 0.8) A.biome = 'TEMPERATE_RAIN_FOREST';
-            else if (A.moisture > 0.6) A.biome = 'TEMPERATE_DECIDUOUS_FOREST';
-            else if (A.moisture > 0.3) A.biome = 'GRASSLAND';
-            else A.biome = 'TEMPERATE_DESERT';
+      var p:Center;
+      for each (p in centers) {
+          if (p.ocean) {
+            p.biome = 'OCEAN';
+          } else if (p.water) {
+            p.biome = 'LAKE';
+            if (p.elevation < 0.1) p.biome = 'MARSH';
+            if (p.elevation > 0.85) p.biome = 'ICE';
+          } else if (p.coast) {
+            p.biome = 'BEACH';
+          } else if (p.elevation > 0.8) {
+            if (p.moisture > 0.5) p.biome = 'SNOW';
+            else if (p.moisture > 0.3) p.biome = 'TUNDRA';
+            else if (p.moisture > 0.1) p.biome = 'BARE';
+            else p.biome = 'SCORCHED';
+          } else if (p.elevation > 0.6) {
+            if (p.moisture > 0.6) p.biome = 'TAIGA';
+            else if (p.moisture > 0.3) p.biome = 'SHRUBLAND';
+            else p.biome = 'TEMPERATE_DESERT';
+          } else if (p.elevation > 0.3) {
+            if (p.moisture > 0.8) p.biome = 'TEMPERATE_RAIN_FOREST';
+            else if (p.moisture > 0.6) p.biome = 'TEMPERATE_DECIDUOUS_FOREST';
+            else if (p.moisture > 0.3) p.biome = 'GRASSLAND';
+            else p.biome = 'TEMPERATE_DESERT';
           } else {
-            if (A.moisture > 0.8) A.biome = 'TROPICAL_RAIN_FOREST';
-            else if (A.moisture > 0.5) A.biome = 'TROPICAL_SEASONAL_FOREST';
-            else if (A.moisture > 0.3) A.biome = 'GRASSLAND';
-            else A.biome = 'SUBTROPICAL_DESERT';
+            if (p.moisture > 0.8) p.biome = 'TROPICAL_RAIN_FOREST';
+            else if (p.moisture > 0.5) p.biome = 'TROPICAL_SEASONAL_FOREST';
+            else if (p.moisture > 0.3) p.biome = 'GRASSLAND';
+            else p.biome = 'SUBTROPICAL_DESERT';
           }
         }
     }
@@ -981,30 +1012,28 @@ package {
     
     // Build noisy line paths for each of the Voronoi edges. There are
     // two noisy line paths for each edge, each covering half the
-    // distance: attr[edge].path0 will be from v0 to the midpoint and
-    // attr[edge].path1 will be from v1 to the midpoint. When drawing
+    // distance: edge.path0 will be from v0 to the midpoint and
+    // edge.path1 will be from v1 to the midpoint. When drawing
     // the polygons, one or the other must be drawn in reverse order.
-    public function buildNoisyEdges(points:Vector.<Point>, attr:Dictionary):void {
-      var _count:int = 0;
-      for each (var point:Point in points) {
-          for each (var edge:Edge in attr[point].edges) {
-              if (attr[edge].d0 && attr[edge].d1 && attr[edge].v0 && attr[edge].v1
-                  && !attr[edge].path0) {
+    public function buildNoisyEdges():void {
+      var p:Center, edge:Edge;
+      for each (p in centers) {
+          for each (edge in p.edges) {
+              if (edge.d0 && edge.d1 && edge.v0 && edge.v1 && !edge.path0) {
                 var f:Number = NOISY_LINE_TRADEOFF;
-                var p:Point = Point.interpolate(attr[edge].v0, attr[edge].d0, f);
-                var q:Point = Point.interpolate(attr[edge].v0, attr[edge].d1, f);
-                var r:Point = Point.interpolate(attr[edge].v1, attr[edge].d0, f);
-                var s:Point = Point.interpolate(attr[edge].v1, attr[edge].d1, f);
+                var t:Point = Point.interpolate(edge.v0.point, edge.d0.point, f);
+                var q:Point = Point.interpolate(edge.v0.point, edge.d1.point, f);
+                var r:Point = Point.interpolate(edge.v1.point, edge.d0.point, f);
+                var s:Point = Point.interpolate(edge.v1.point, edge.d1.point, f);
 
                 var minLength:int = 4;
-                if (attr[attr[edge].d0].water != attr[attr[edge].d1].water) minLength = 3;
-                if (attr[attr[edge].d0].biome == attr[attr[edge].d1].biome) minLength = 8;
-                if (attr[attr[edge].d0].ocean && attr[attr[edge].d1].ocean) minLength = 100;
-                if (attr[edge].river || attr[edge].lava) minLength = 1;
+                if (edge.d0.water != edge.d1.water) minLength = 3;
+                if (edge.d0.biome == edge.d1.biome) minLength = 8;
+                if (edge.d0.ocean && edge.d1.ocean) minLength = 100;
+                if (edge.river || edge.lava) minLength = 1;
                 
-                attr[edge].path0 = buildNoisyLineSegments(mapRandom, attr[edge].v0, p, attr[edge].midpoint, q, minLength);
-                attr[edge].path1 = buildNoisyLineSegments(mapRandom, attr[edge].v1, s, attr[edge].midpoint, r, minLength);
-                _count++;
+                edge.path0 = buildNoisyLineSegments(mapRandom, edge.v0.point, t, edge.midpoint, q, minLength);
+                edge.path1 = buildNoisyLineSegments(mapRandom, edge.v1.point, s, edge.midpoint, r, minLength);
               }
             }
         }
@@ -1013,16 +1042,16 @@ package {
 
     // Look up a Voronoi Edge object given two adjacent Voronoi
     // polygons, or two adjacent Voronoi corners
-    public function lookupEdgeFromCenter(p:Point, q:Point):Edge {
-      for each (var edge:Edge in attr[p].edges) {
-          if (attr[edge].d0 == q || attr[edge].d1 == q) return edge;
+    public function lookupEdgeFromCenter(p:Center, r:Center):Edge {
+      for each (var edge:Edge in p.edges) {
+          if (edge.d0 == r || edge.d1 == r) return edge;
         }
       return null;
     }
 
-    public function lookupEdgeFromCorner(p:Point, q:Point):Edge {
-      for each (var edge:Edge in attr[p].edges) {
-          if (attr[edge].v0 == q || attr[edge].v1 == q) return edge;
+    public function lookupEdgeFromCorner(q:Corner, s:Corner):Edge {
+      for each (var edge:Edge in q.edges) {
+          if (edge.v0 == s || edge.v1 == s) return edge;
         }
       return null;
     }
@@ -1147,7 +1176,7 @@ package {
     // the resulting polygon data is transferred into graphicsData
     // before rendering.
     public function render3dPolygons(graphics:Graphics, colors:Object, colorFunction:Function):void {
-      var p:Point, q:Point, edge:Edge;
+      var p:Center, q:Corner, edge:Edge;
       var zScale:Number = 0.15*SIZE;
       
       graphics.beginFill(colors.OCEAN);
@@ -1156,31 +1185,31 @@ package {
 
       if (triangles3d.length == 0) {
         graphicsData = new Vector.<IGraphicsData>();
-        for each (p in points) {
-            if (attr[p].ocean) continue;
-            for each (edge in attr[p].edges) {
-                var color:int = colors[attr[p].biome] || 0;
+        for each (p in centers) {
+            if (p.ocean) continue;
+            for each (edge in p.edges) {
+                var color:int = colors[p.biome] || 0;
                 if (colorFunction != null) {
                   color = colorFunction(color, p, q, edge);
                 }
 
                 // We'll draw two triangles: center - corner0 -
                 // midpoint and center - midpoint - corner1.
-                var corner0:Point = attr[edge].v0;
-                var corner1:Point = attr[edge].v1;
+                var corner0:Corner = edge.v0;
+                var corner1:Corner = edge.v1;
 
                 if (corner0 == null || corner1 == null) {
                   // Edge of the map; we can't deal with it right now
                   continue;
                 }
 
-                var zp:Number = zScale*attr[p].elevation;
-                var z0:Number = zScale*attr[corner0].elevation;
-                var z1:Number = zScale*attr[corner1].elevation;
+                var zp:Number = zScale*p.elevation;
+                var z0:Number = zScale*corner0.elevation;
+                var z1:Number = zScale*corner1.elevation;
                 triangles3d.push({
-                    a:new Vector3D(p.x, p.y, zp),
-                      b:new Vector3D(corner0.x, corner0.y, z0),
-                      c:new Vector3D(corner1.x, corner1.y, z1),
+                    a:new Vector3D(p.point.x, p.point.y, zp),
+                      b:new Vector3D(corner0.point.x, corner0.point.y, z0),
+                      c:new Vector3D(corner1.point.x, corner1.point.y, z1),
                       rA:null,
                       rB:null,
                       rC:null,
@@ -1225,7 +1254,7 @@ package {
     
     // Render the interior of polygons
     public function renderPolygons(graphics:Graphics, colors:Object, texturedFills:Boolean, gradientFillProperty:String, colorOverrideFunction:Function):void {
-      var p:Point, q:Point;
+      var p:Center, r:Center;
 
       // My Voronoi polygon rendering doesn't handle the boundary
       // polygons, so I just fill everything with ocean first.
@@ -1233,29 +1262,29 @@ package {
       graphics.drawRect(0, 0, SIZE, SIZE);
       graphics.endFill();
       
-      for each (p in points) {
-          for each (q in attr[p].neighbors) {
-              var edge:Edge = lookupEdgeFromCenter(p, q);
-              var color:int = colors[attr[p].biome] || 0;
+      for each (p in centers) {
+          for each (r in p.neighbors) {
+              var edge:Edge = lookupEdgeFromCenter(p, r);
+              var color:int = colors[p.biome] || 0;
               if (colorOverrideFunction != null) {
-                color = colorOverrideFunction(color, p, q, edge);
+                color = colorOverrideFunction(color, p, r, edge);
               }
 
               function drawPath0():void {
-                graphics.moveTo(p.x, p.y);
-                graphics.lineTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
-                drawPathForwards(graphics, attr[edge].path0);
-                graphics.lineTo(p.x, p.y);
+                graphics.moveTo(p.point.x, p.point.y);
+                graphics.lineTo(edge.path0[0].x, edge.path0[0].y);
+                drawPathForwards(graphics, edge.path0);
+                graphics.lineTo(p.point.x, p.point.y);
               }
 
               function drawPath1():void {
-                graphics.moveTo(p.x, p.y);
-                graphics.lineTo(attr[edge].path1[0].x, attr[edge].path1[0].y);
-                drawPathForwards(graphics, attr[edge].path1);
-                graphics.lineTo(p.x, p.y);
+                graphics.moveTo(p.point.x, p.point.y);
+                graphics.lineTo(edge.path1[0].x, edge.path1[0].y);
+                drawPathForwards(graphics, edge.path1);
+                graphics.lineTo(p.point.x, p.point.y);
               }
 
-              if (attr[edge].path0 == null || attr[edge].path1 == null) {
+              if (edge.path0 == null || edge.path1 == null) {
                 // It's at the edge of the map, where we don't have
                 // the noisy edges computed. TODO: figure out how to
                 // fill in these edges from the voronoi library.
@@ -1265,25 +1294,25 @@ package {
               if (gradientFillProperty != null) {
                 // We'll draw two triangles: center - corner0 -
                 // midpoint and center - midpoint - corner1.
-                var corner0:Point = attr[edge].v0;
-                var corner1:Point = attr[edge].v1;
+                var corner0:Corner = edge.v0;
+                var corner1:Corner = edge.v1;
 
                 // We pick the midpoint elevation/moisture between
                 // corners instead of between polygon centers because
                 // the resulting gradients tend to be smoother.
-                var midpoint:Point = attr[edge].midpoint;
-                var midpointAttr:Number = 0.5*(attr[corner0][gradientFillProperty]+attr[corner1][gradientFillProperty]);
+                var midpoint:Point = edge.midpoint;
+                var midpointAttr:Number = 0.5*(corner0[gradientFillProperty]+corner1[gradientFillProperty]);
                 drawGradientTriangle
                   (graphics,
-                   new Vector3D(p.x, p.y, attr[p][gradientFillProperty]),
-                   new Vector3D(corner0.x, corner0.y, attr[corner0][gradientFillProperty]),
+                   new Vector3D(p.point.x, p.point.y, p[gradientFillProperty]),
+                   new Vector3D(corner0.point.x, corner0.point.y, corner0[gradientFillProperty]),
                    new Vector3D(midpoint.x, midpoint.y, midpointAttr),
                    colors.GRADIENT_LOW, colors.GRADIENT_HIGH, drawPath0);
                 drawGradientTriangle
                   (graphics,
-                   new Vector3D(p.x, p.y, attr[p][gradientFillProperty]),
+                   new Vector3D(p.point.x, p.point.y, p[gradientFillProperty]),
                    new Vector3D(midpoint.x, midpoint.y, midpointAttr),
-                   new Vector3D(corner1.x, corner1.y, attr[corner1][gradientFillProperty]),
+                   new Vector3D(corner1.point.x, corner1.point.y, corner1[gradientFillProperty]),
                    colors.GRADIENT_LOW, colors.GRADIENT_HIGH, drawPath1);
               } else if (texturedFills) {
                 graphics.beginBitmapFill(getBitmapTexture(color));
@@ -1305,17 +1334,16 @@ package {
     public function renderRoads(graphics:Graphics, colors:Object):void {
       // First draw the roads, because any other feature should draw
       // over them. Also, roads don't use the noisy lines.
-      var p:Point, q:Point, A:Point, B:Point, C:Point;
+      var p:Center, A:Point, B:Point, C:Point;
       var i:int, j:int, d:Number, edge1:Edge, edge2:Edge, edges:Vector.<Edge>;
 
       // Helper function: find the normal vector across edge 'e' and
       // make sure to point it in a direction towards 'c'.
       function normalTowards(e:Edge, c:Point, len:Number):Point {
         // Rotate the v0-->v1 vector by 90 degrees:
-        var n:Point = new Point(-(attr[e].v1.y - attr[e].v0.y),
-                                attr[e].v1.x - attr[e].v0.x);
+        var n:Point = new Point(-(e.v1.point.y - e.v0.point.y), e.v1.point.x - e.v0.point.x);
         // Flip it around it if doesn't point towards c
-        var d:Point = c.subtract(attr[e].midpoint);
+        var d:Point = c.subtract(e.midpoint);
         if (n.x * d.x + n.y * d.y < 0) {
           n.x = -n.x;
           n.y = -n.y;
@@ -1324,46 +1352,46 @@ package {
         return n;
       }
       
-      for each (p in points) {
-          if (attr[p].road_connections == 2) {
+      for each (p in centers) {
+          if (p.road_connections == 2) {
             // Regular road: draw a spline from one edge to the other.
-            edges = attr[p].edges;
+            edges = p.edges;
             for (i = 0; i < edges.length; i++) {
               edge1 = edges[i];
-              if (attr[edge1].road) {
+              if (edge1.road) {
                 for (j = i+1; j < edges.length; j++) {
                   edge2 = edges[j];
-                  if (attr[edge2].road) {
+                  if (edge2.road) {
                     // The spline connects the midpoints of the edges
                     // and at right angles to them. In between we
                     // generate two control points A and B and one
                     // additional vertex C.  This usually works but
                     // not always.
                     d = 0.5*Math.min
-                      (attr[edge1].midpoint.subtract(p).length,
-                       attr[edge2].midpoint.subtract(p).length);
-                    A = normalTowards(edge1, p, d).add(attr[edge1].midpoint);
-                    B = normalTowards(edge2, p, d).add(attr[edge2].midpoint);
+                      (edge1.midpoint.subtract(p.point).length,
+                       edge2.midpoint.subtract(p.point).length);
+                    A = normalTowards(edge1, p.point, d).add(edge1.midpoint);
+                    B = normalTowards(edge2, p.point, d).add(edge2.midpoint);
                     C = Point.interpolate(A, B, 0.5);
                     graphics.lineStyle(1.1, colors.ROAD);
-                    graphics.moveTo(attr[edge1].midpoint.x, attr[edge1].midpoint.y);
+                    graphics.moveTo(edge1.midpoint.x, edge1.midpoint.y);
                     graphics.curveTo(A.x, A.y, C.x, C.y);
-                    graphics.curveTo(B.x, B.y, attr[edge2].midpoint.x, attr[edge2].midpoint.y);
+                    graphics.curveTo(B.x, B.y, edge2.midpoint.x, edge2.midpoint.y);
                     graphics.lineStyle();
                   }
                 }
               }
             }
           }
-          if (attr[p].road_connections && attr[p].road_connections != 2) {
+          if (p.road_connections && p.road_connections != 2) {
             // Intersection: draw a road spline from each edge to the center
-            for each (edge1 in attr[p].edges) {
-                if (attr[edge1].road) {
-                  d = 0.25*attr[edge1].midpoint.subtract(p).length;
-                  A = normalTowards(edge1, p, d).add(attr[edge1].midpoint);
+            for each (edge1 in p.edges) {
+                if (edge1.road) {
+                  d = 0.25*edge1.midpoint.subtract(p.point).length;
+                  A = normalTowards(edge1, p.point, d).add(edge1.midpoint);
                   graphics.lineStyle(1.4, colors.ROAD);
-                  graphics.moveTo(attr[edge1].midpoint.x, attr[edge1].midpoint.y);
-                  graphics.curveTo(A.x, A.y, p.x, p.y);
+                  graphics.moveTo(edge1.midpoint.x, edge1.midpoint.y);
+                  graphics.curveTo(A.x, A.y, p.point.x, p.point.y);
                   graphics.lineStyle();
                 }
               }
@@ -1376,30 +1404,30 @@ package {
     // rivers, lava fissures. We draw all of these after the polygons
     // so that polygons don't overwrite any edges.
     public function renderEdges(graphics:Graphics, colors:Object):void {
-      var p:Point, q:Point, edge:Edge;
+      var p:Center, r:Center, edge:Edge;
 
-      for each (p in points) {
-          for each (q in attr[p].neighbors) {
-              edge = lookupEdgeFromCenter(p, q);
-              if (attr[edge].path0 == null || attr[edge].path1 == null) {
+      for each (p in centers) {
+          for each (r in p.neighbors) {
+              edge = lookupEdgeFromCenter(p, r);
+              if (edge.path0 == null || edge.path1 == null) {
                 // It's at the edge of the map, where we don't have
                 // the noisy edges computed. TODO: fill these in with
                 // non-noisy lines.
                 continue;
               }
-              if (attr[p].ocean != attr[q].ocean) {
+              if (p.ocean != r.ocean) {
                 // One side is ocean and the other side is land -- coastline
                 graphics.lineStyle(2, colors.COAST);
-              } else if ((attr[p].water > 0) != (attr[q].water > 0) && attr[p].biome != 'ICE' && attr[q].biome != 'ICE') {
+              } else if ((p.water > 0) != (r.water > 0) && p.biome != 'ICE' && r.biome != 'ICE') {
                 // Lake boundary
                 graphics.lineStyle(1, colors.LAKESHORE);
-              } else if (attr[p].water || attr[q].water) {
+              } else if (p.water || r.water) {
                 // Lake interior – we don't want to draw the rivers here
                 continue;
-              } else if (attr[edge].river != null) {
+              } else if (edge.river != 0.0) {
                 // River edge
-                graphics.lineStyle(Math.sqrt(attr[edge].river), colors.RIVER);
-              } else if (attr[edge].lava != null) {
+                graphics.lineStyle(Math.sqrt(edge.river), colors.RIVER);
+              } else if (edge.lava) {
                 // Lava flow
                 graphics.lineStyle(1, colors.LAVA);
               } else {
@@ -1407,9 +1435,9 @@ package {
                 continue;
               }
               
-              graphics.moveTo(attr[edge].path0[0].x, attr[edge].path0[0].y);
-              drawPathForwards(graphics, attr[edge].path0);
-              drawPathBackwards(graphics, attr[edge].path1);
+              graphics.moveTo(edge.path0[0].x, edge.path0[0].y);
+              drawPathForwards(graphics, edge.path0);
+              drawPathBackwards(graphics, edge.path1);
               graphics.lineStyle();
             }
         }
@@ -1418,30 +1446,30 @@ package {
 
     // Render the polygons so that each can be seen clearly
     public function renderDebugPolygons(graphics:Graphics, colors:Object):void {
-      var p:Point, edge:Edge;
+      var p:Center, q:Corner, edge:Edge;
 
-      for each (p in points) {
-          graphics.beginFill(interpolateColor(colors[attr[p].biome] || 0, 0xdddddd, 0.2));
-          for each (edge in attr[p].edges) {
-              if (attr[edge].v0 && attr[edge].v1) {
-                graphics.moveTo(p.x, p.y);
-                graphics.lineTo(attr[edge].v0.x, attr[edge].v0.y);
-                if (attr[edge].river) {
+      for each (p in centers) {
+          graphics.beginFill(interpolateColor(colors[p.biome] || 0, 0xdddddd, 0.2));
+          for each (edge in p.edges) {
+              if (edge.v0 && edge.v1) {
+                graphics.moveTo(p.point.x, p.point.y);
+                graphics.lineTo(edge.v0.point.x, edge.v0.point.y);
+                if (edge.river) {
                   graphics.lineStyle(2, displayColors.RIVER, 1.0);
                 } else {
                   graphics.lineStyle(1, 0x000000, 0.4);
                 }
-                graphics.lineTo(attr[edge].v1.x, attr[edge].v1.y);
+                graphics.lineTo(edge.v1.point.x, edge.v1.point.y);
                 graphics.lineStyle();
               }
             }
           graphics.endFill();
-          graphics.beginFill(attr[p].water > 0 ? 0x00ffff : attr[p].ocean? 0xff0000 : 0x000000, 0.7);
-          graphics.drawCircle(p.x, p.y, 1.3);
+          graphics.beginFill(p.water > 0 ? 0x00ffff : p.ocean? 0xff0000 : 0x000000, 0.7);
+          graphics.drawCircle(p.point.x, p.point.y, 1.3);
           graphics.endFill();
-          for each (var q:Point in attr[p].corners) {
-              graphics.beginFill(attr[q].water? 0x0000ff : 0x009900);
-              graphics.drawRect(q.x-0.7, q.y-0.7, 1.5, 1.5);
+          for each (q in p.corners) {
+              graphics.beginFill(q.water? 0x0000ff : 0x009900);
+              graphics.drawRect(q.point.x-0.7, q.point.y-0.7, 1.5, 1.5);
               graphics.endFill();
             }
         }
@@ -1450,27 +1478,27 @@ package {
 
     // Render the paths from each polygon to the ocean, showing watersheds
     public function renderWatersheds(graphics:Graphics):void {
-      var p:Point, q:Point;
+      var q:Corner, r:Corner;
 
-      for each (p in corners) {
-          if (!attr[p].ocean) {
-            q = attr[p].downslope;
-            graphics.lineStyle(1.2, attr[p].watershed == attr[q].watershed? 0x00ffff : 0xff00ff,
-                               0.1*Math.sqrt(attr[attr[p].watershed].watershed_size || 1));
-            graphics.moveTo(p.x, p.y);
-            graphics.lineTo(q.x, q.y);
+      for each (q in corners) {
+          if (!q.ocean) {
+            r = q.downslope;
+            graphics.lineStyle(1.2, q.watershed == r.watershed? 0x00ffff : 0xff00ff,
+                               0.1*Math.sqrt(q.watershed.watershed_size || 1));
+            graphics.moveTo(q.point.x, q.point.y);
+            graphics.lineTo(r.point.x, r.point.y);
             graphics.lineStyle();
           }
         }
       
-      for each (p in corners) {
-          for each (q in attr[p].neighbors) {
-              if (!attr[p].ocean && !attr[q].ocean && attr[p].watershed != attr[q].watershed && !attr[p].coast && !attr[q].coast) {
-                var edge:Edge = lookupEdgeFromCorner(p, q);
-                graphics.lineStyle(2.5, 0x000000, 0.05*Math.sqrt((attr[attr[p].watershed].watershed_size || 1) + (attr[attr[q].watershed].watershed_size || 1)));
-                graphics.moveTo(attr[edge].d0.x, attr[edge].d0.y);
-                graphics.lineTo(attr[edge].midpoint.x, attr[edge].midpoint.y);
-                graphics.lineTo(attr[edge].d1.x, attr[edge].d1.y);
+      for each (q in corners) {
+          for each (r in q.neighbors) {
+              if (!q.ocean && !r.ocean && q.watershed != r.watershed && !q.coast && !r.coast) {
+                var edge:Edge = lookupEdgeFromCorner(q, r);
+                graphics.lineStyle(2.5, 0x000000, 0.05*Math.sqrt((q.watershed.watershed_size || 1) + (r.watershed.watershed_size || 1)));
+                graphics.moveTo(edge.d0.point.x, edge.d0.point.y);
+                graphics.lineTo(edge.midpoint.x, edge.midpoint.y);
+                graphics.lineTo(edge.d1.point.x, edge.d1.point.y);
                 graphics.lineStyle();
               }
             }
@@ -1511,31 +1539,31 @@ package {
 
 
     private var lightVector:Vector3D = new Vector3D(-1, -1, 0);
-    public function colorWithSlope(color:int, p:Point, q:Point, edge:Edge):int {
-      var r:Point = attr[edge].v0;
-      var s:Point = attr[edge].v1;
+    public function colorWithSlope(color:int, p:Center, q:Center, edge:Edge):int {
+      var r:Corner = edge.v0;
+      var s:Corner = edge.v1;
       if (!r || !s) {
         // Edge of the map
         return displayColors.OCEAN;
-      } else if (attr[p].biome == 'LAKE' || attr[p].biome == 'ICE' || attr[p].biome == 'MARSH'
-                 || attr[p].biome == 'SCORCHED' || attr[p].biome == 'OCEAN') {
+      } else if (p.biome == 'LAKE' || p.biome == 'ICE' || p.biome == 'MARSH'
+                 || p.biome == 'SCORCHED' || p.biome == 'OCEAN') {
         return color;
       }
 
       var colorLow:int = 0x1d8e39, colorHigh:int = 0xcfb78b;
-      if (attr[p].biome == 'SNOW') {
+      if (p.biome == 'SNOW') {
         colorLow = 0xcccccc;
         colorHigh = 0xffffff;
-      } else if (attr[p].biome == 'BARE') {
+      } else if (p.biome == 'BARE') {
         colorLow = 0x444444;
         colorHigh = 0x888888;
-      } else if (attr[p].biome == 'BEACH') {
+      } else if (p.biome == 'BEACH') {
         colorLow = 0x807057;
         colorHigh = 0xc0b097;
       }
-      var A:Vector3D = new Vector3D(p.x, p.y, attr[p].elevation);
-      var B:Vector3D = new Vector3D(r.x, r.y, attr[r].elevation);
-      var C:Vector3D = new Vector3D(s.x, s.y, attr[s].elevation);
+      var A:Vector3D = new Vector3D(p.point.x, p.point.y, p.elevation);
+      var B:Vector3D = new Vector3D(r.point.x, r.point.y, r.elevation);
+      var C:Vector3D = new Vector3D(s.point.x, s.point.y, s.elevation);
       var normal:Vector3D = B.subtract(A).crossProduct(C.subtract(A));
       if (normal.z < 0) { normal.scaleBy(-1); }
       normal.normalize();
@@ -1547,8 +1575,8 @@ package {
     }
 
     
-    public function colorWithSmoothColors(color:int, p:Point, q:Point, edge:Edge):int {
-      var biome:String = attr[p].biome;
+    public function colorWithSmoothColors(color:int, p:Center, q:Center, edge:Edge):int {
+      var biome:String = p.biome;
               
       if (biome != 'ICE' && biome != 'OCEAN' && biome != 'LAKE' && biome != 'MARSH'
           && biome != 'SCORCHED' && biome != 'BARE' && biome != 'SNOW') {
@@ -1558,8 +1586,8 @@ package {
              interpolateColor(0x1d8e39, 0x97cb1b, elevation),
              moisture);
         }
-        color = interpolateColor(smoothColor(attr[p].elevation, attr[p].moisture),
-                                 smoothColor(attr[q].elevation, attr[q].moisture),
+        color = interpolateColor(smoothColor(p.elevation, p.moisture),
+                                 smoothColor(q.elevation, q.moisture),
                                  0.5);
         if (biome == 'BEACH') {
           color = interpolateColor(color, displayColors.BEACH, 0.7);
@@ -1638,13 +1666,13 @@ package {
         stage.quality = 'best';
 
         // Mark the polygon centers in the export bitmap
-        for each (var p:Point in points) {
-            if (!attr[p].ocean) {
-              var q:Point = new Point(Math.floor(p.x * 2048/SIZE),
-                                    Math.floor(p.y * 2048/SIZE));
-              exportBitmap.setPixel(q.x, q.y,
-                                    exportBitmap.getPixel(q.x, q.y)
-                                    | (attr[p].road_connections?
+        for each (var p:Center in centers) {
+            if (!p.ocean) {
+              var r:Point = new Point(Math.floor(p.point.x * 2048/SIZE),
+                                    Math.floor(p.point.y * 2048/SIZE));
+              exportBitmap.setPixel(r.x, r.y,
+                                    exportBitmap.getPixel(r.x, r.y)
+                                    | (p.road_connections?
                                        exportOverrideColors.POLYGON_CENTER_SAFE
                                        : exportOverrideColors.POLYGON_CENTER));
             }
@@ -1804,6 +1832,58 @@ package {
   
 }
 
+
+// Data structures to represent the graph
+class Center {
+  public var index:int;
+  
+  public var point:Point;
+  public var ocean:Boolean;
+  public var water:int;
+  public var coast:Boolean;
+  public var border:Boolean;
+  public var biome:String;
+  public var elevation:Number;
+  public var moisture:Number;
+  public var edges:Vector.<Edge>;
+  public var neighbors:Vector.<Center>;
+  public var corners:Vector.<Corner>;
+  public var contour:int;
+  
+  public var road_connections:int;  // should be Vector.<Corner>
+};
+
+class Corner {
+  public var index:int;
+  
+  public var point:Point;
+  public var ocean:Boolean;
+  public var water:Boolean;
+  public var coast:Boolean;
+  public var border:Boolean;
+  public var elevation:Number;
+  public var moisture:Number;
+  public var edges:Vector.<Edge>;
+  public var neighbors:Vector.<Corner>;
+  public var corners:Vector.<Center>;
+  public var contour:int;
+  
+  public var river:int;
+  public var downslope:Corner;
+  public var watershed:Corner;
+  public var watershed_size:int;
+};
+
+class Edge {
+  public var index:int;
+  public var v0:Corner, v1:Corner;
+  public var d0:Center, d1:Center;
+  public var path0:Vector.<Point>, path1:Vector.<Point>;
+  public var midpoint:Point;
+  public var river:Number;
+  public var road:Boolean;
+  public var lava:Boolean;
+};
 
 // Factory class to build the 'inside' function that tells us whether
 // a point should be on the island or in the water.
