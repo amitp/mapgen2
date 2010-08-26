@@ -225,17 +225,14 @@ package {
       buildGraph();
       Debug.trace("TIME for buildGraph:", getTimer()-t);
       
-
+      
       // Determine the elevations and water at Voronoi corners.
       t = getTimer();
       assignCornerElevations();
-      Debug.trace("TIME for elevation queue processing:", getTimer()-t);
+      Debug.trace("TIME for corner elevations:", getTimer()-t);
 
-      
-      // Determine polygon type: ocean, coast, land, and assign
-      // elevation to land polygons based on corner elevations. We
-      // have to do this before rescaling because rescaling only
-      // applies to land corners.
+
+      // Determine polygon and corner type: ocean, coast, land.
       t = getTimer();
       assignOceanCoastAndLand();
       Debug.trace("TIME for ocean/coast/land:", getTimer()-t);
@@ -261,8 +258,13 @@ package {
       for (i = 0; i < 10; i++) {
         redistributeElevations(landPoints);
       }
-      assignPolygonElevations();
       Debug.trace("TIME for elevation rescaling:", getTimer()-t);
+
+      
+      // Polygon elevations are the average of their corners
+      t = getTimer();
+      assignPolygonElevations();
+      Debug.trace("TIME for polygon elevations:", getTimer()-t);
       
 
       // Determine downslope paths.
@@ -516,7 +518,7 @@ package {
           }
         }
       // Traverse the graph and assign elevations to each point. As we
-      // move away from the coastline, increase the elevations. This
+      // move away from the map border, increase the elevations. This
       // guarantees that rivers always have a way down to the coast by
       // going downhill (no local minima).
       while (queue.length > 0) {
@@ -539,6 +541,7 @@ package {
           }
       }
     }
+
     
     // Change the overall distribution of elevations so that lower
     // elevations are more common than higher
