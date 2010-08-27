@@ -89,8 +89,9 @@ package {
     // This is the current map style. UI buttons change this, and it
     // persists when you make a new map. The timer is used only when
     // the map mode is '3d'.
-    public var mapMode:String = 'biome';
+    public var mapMode:String = 'smooth';
     public var render3dTimer:Timer = new Timer(1000/20, 0);
+    public var noiseLayer:Bitmap = new Bitmap(new BitmapData(SIZE, SIZE));
     
     // These store the graph data
     public var centers:Vector.<Center>;
@@ -106,6 +107,10 @@ package {
     public function voronoi_set() {
       stage.scaleMode = 'noScale';
       stage.align = 'TL';
+
+      addChild(noiseLayer);
+      noiseLayer.bitmapData.noise(555, 128-10, 128+10, 7, true);
+      noiseLayer.blendMode = BlendMode.HARDLIGHT;
 
       addChild(new Debug(this));
 
@@ -846,7 +851,7 @@ package {
       }
       // Salt water
       for each (q in corners) {
-          if (q.ocean) q.moisture = 1.0;
+          if (q.ocean || q.coast) q.moisture = 1.0;
         }
       // Polygon moisture is the average of the moisture at corners
       for each (p in centers) {
@@ -1136,27 +1141,31 @@ package {
     // Draw the map in the current map mode
     public function drawMap():void {
       graphicsReset();
-
+      noiseLayer.visible = true;
+      
       if (mapMode == '3d') {
         if (!render3dTimer.running) render3dTimer.start();
+        noiseLayer.visible = false;
         render3dPolygons(graphics, displayColors, colorWithSlope);
         return;
       } else if (mapMode == 'polygons') {
+        noiseLayer.visible = false;
         renderDebugPolygons(graphics, displayColors);
       } else if (mapMode == 'watersheds') {
+        noiseLayer.visible = false;
         renderDebugPolygons(graphics, displayColors);
         renderWatersheds(graphics);
         return;
       } else if (mapMode == 'biome') {
-        renderPolygons(graphics, displayColors, true, null, null);
+        renderPolygons(graphics, displayColors, null, null);
       } else if (mapMode == 'slopes') {
-        renderPolygons(graphics, displayColors, true, null, colorWithSlope);
+        renderPolygons(graphics, displayColors, null, colorWithSlope);
       } else if (mapMode == 'smooth') {
-        renderPolygons(graphics, displayColors, false, null, colorWithSmoothColors);
+        renderPolygons(graphics, displayColors, null, colorWithSmoothColors);
       } else if (mapMode == 'elevation') {
-        renderPolygons(graphics, elevationGradientColors, false, 'elevation', null);
+        renderPolygons(graphics, elevationGradientColors, 'elevation', null);
       } else if (mapMode == 'moisture') {
-        renderPolygons(graphics, moistureGradientColors, false, 'moisture', null);
+        renderPolygons(graphics, moistureGradientColors, 'moisture', null);
       }
 
       if (render3dTimer.running) render3dTimer.stop();
@@ -1253,7 +1262,7 @@ package {
 
     
     // Render the interior of polygons
-    public function renderPolygons(graphics:Graphics, colors:Object, texturedFills:Boolean, gradientFillProperty:String, colorOverrideFunction:Function):void {
+    public function renderPolygons(graphics:Graphics, colors:Object, gradientFillProperty:String, colorOverrideFunction:Function):void {
       var p:Center, r:Center;
 
       // My Voronoi polygon rendering doesn't handle the boundary
@@ -1314,11 +1323,6 @@ package {
                    new Vector3D(midpoint.x, midpoint.y, midpointAttr),
                    new Vector3D(corner1.point.x, corner1.point.y, corner1[gradientFillProperty]),
                    colors.GRADIENT_LOW, colors.GRADIENT_HIGH, drawPath1);
-              } else if (texturedFills) {
-                graphics.beginBitmapFill(getBitmapTexture(color));
-                drawPath0();
-                drawPath1();
-                graphics.endFill();
               } else {
                 graphics.beginFill(color);
                 drawPath0();
@@ -1506,38 +1510,6 @@ package {
     }
     
 
-    // Build a noisy bitmap tile for a given color
-    private var _textures:Array = [];
-    public function getBitmapTexture(color:uint):BitmapData {
-      if (!_textures[color]) {
-        var texture:BitmapData = new BitmapData(256, 256);
-        texture.noise(487 + color /* random seed */);
-        var paletteMap:Array = new Array(256);
-        var zeroMap:Array = new Array(256);
-        for (var i:int = 0; i < 256; i++) {
-          var level:Number = 0.9 + 0.2 * (i / 255.0);
-
-          /* special case */ if (color == 0xffffff) level = 0.95 + 0.1 * (i / 255.0);
-          
-          var r:int = level * (color >> 16);
-          var g:int = level * ((color >> 8) & 0xff);
-          var b:int = level * (color & 0xff);
-
-          if (r < 0) r = 0; if (r > 255) r = 255;
-          if (g < 0) g = 0; if (g > 255) g = 255;
-          if (b < 0) b = 0; if (b > 255) b = 255;
-          
-          paletteMap[i] = 0xff000000 | (r << 16) | (g << 8) | b;
-          zeroMap[i] = 0x00000000;
-        }
-        texture.paletteMap(texture, texture.rect, new Point(0, 0),
-                           paletteMap, zeroMap, zeroMap, zeroMap);
-        _textures[color] = texture;
-      }
-      return _textures[color];
-    }
-
-
     private var lightVector:Vector3D = new Vector3D(-1, -1, 0);
     public function colorWithSlope(color:int, p:Center, q:Center, edge:Edge):int {
       var r:Corner = edge.v0;
@@ -1545,22 +1517,13 @@ package {
       if (!r || !s) {
         // Edge of the map
         return displayColors.OCEAN;
-      } else if (p.biome == 'LAKE' || p.biome == 'ICE' || p.biome == 'MARSH'
-                 || p.biome == 'SCORCHED' || p.biome == 'OCEAN') {
+      } else if (p.water) {
         return color;
       }
 
-      var colorLow:int = 0x1d8e39, colorHigh:int = 0xcfb78b;
-      if (p.biome == 'SNOW') {
-        colorLow = 0xcccccc;
-        colorHigh = 0xffffff;
-      } else if (p.biome == 'BARE') {
-        colorLow = 0x444444;
-        colorHigh = 0x888888;
-      } else if (p.biome == 'BEACH') {
-        colorLow = 0x807057;
-        colorHigh = 0xc0b097;
-      }
+      if (q != null && p.water == q.water) color = interpolateColor(color, displayColors[q.biome], 0.4);
+      var colorLow:int = interpolateColor(color, 0x333333, 0.7);
+      var colorHigh:int = interpolateColor(color, 0xffffff, 0.3);
       var A:Vector3D = new Vector3D(p.point.x, p.point.y, p.elevation);
       var B:Vector3D = new Vector3D(r.point.x, r.point.y, r.elevation);
       var C:Vector3D = new Vector3D(s.point.x, s.point.y, s.elevation);
@@ -1570,30 +1533,15 @@ package {
       var light:Number = 0.5 + 35*normal.dotProduct(lightVector);
       if (light < 0) light = 0;
       if (light > 1) light = 1;
-      light = Math.round(light*100)/100;  // Discrete steps for easier shading
-      return interpolateColor(colorLow, colorHigh, light);
+      if (light < 0.5) return interpolateColor(colorLow, color, light*2);
+      else return interpolateColor(color, colorHigh, light*2-1);
     }
 
-    
+
     public function colorWithSmoothColors(color:int, p:Center, q:Center, edge:Edge):int {
-      var biome:String = p.biome;
-              
-      if (biome != 'ICE' && biome != 'OCEAN' && biome != 'LAKE' && biome != 'MARSH'
-          && biome != 'SCORCHED' && biome != 'BARE' && biome != 'SNOW') {
-        function smoothColor(elevation:Number, moisture:Number):int {
-          return interpolateColor
-            (interpolateColor(0xb19772, 0xcfb78b, elevation),
-             interpolateColor(0x1d8e39, 0x97cb1b, elevation),
-             moisture);
-        }
-        color = interpolateColor(smoothColor(p.elevation, p.moisture),
-                                 smoothColor(q.elevation, q.moisture),
-                                 0.5);
-        if (biome == 'BEACH') {
-          color = interpolateColor(color, displayColors.BEACH, 0.7);
-        }
+      if (q != null && p.water == q.water) {
+        color = interpolateColor(displayColors[p.biome], displayColors[q.biome], 0.25);
       }
-      
       return color;
     }
 
@@ -1657,7 +1605,7 @@ package {
       }
 
       if (layer == 'overrides') {
-        renderPolygons(exportGraphics.graphics, exportOverrideColors, false, null, null);
+        renderPolygons(exportGraphics.graphics, exportOverrideColors, null, null);
         renderRoads(exportGraphics.graphics, exportOverrideColors);
         renderEdges(exportGraphics.graphics, exportOverrideColors);
 
@@ -1680,11 +1628,11 @@ package {
         
         saveBitmapToArray();
       } else if (layer == 'elevation') {
-        renderPolygons(exportGraphics.graphics, exportElevationColors, false, 'elevation', null);
+        renderPolygons(exportGraphics.graphics, exportElevationColors, 'elevation', null);
         exportBitmap.draw(exportGraphics, m);
         saveBitmapToArray();
       } else if (layer == 'moisture') {
-        renderPolygons(exportGraphics.graphics, exportMoistureColors, false, 'moisture', null);
+        renderPolygons(exportGraphics.graphics, exportMoistureColors, 'moisture', null);
         exportBitmap.draw(exportGraphics, m);
         saveBitmapToArray();
       }
