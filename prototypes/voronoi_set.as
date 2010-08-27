@@ -151,6 +151,10 @@ package {
     
     public function reset():void {
       var p:Center, q:Corner, edge:Edge;
+
+      // Clear debugging area, if debug log is enabled
+      Debug.clear();
+      
       // Break cycles so the garbage collector will release data.
       if (edges) {
         for each (edge in edges) {
@@ -1031,9 +1035,8 @@ package {
                 var r:Point = Point.interpolate(edge.v1.point, edge.d0.point, f);
                 var s:Point = Point.interpolate(edge.v1.point, edge.d1.point, f);
 
-                var minLength:int = 4;
-                if (edge.d0.water != edge.d1.water) minLength = 3;
-                if (edge.d0.biome == edge.d1.biome) minLength = 8;
+                var minLength:int = 10;
+                if (edge.d0.biome != edge.d1.biome) minLength = 3;
                 if (edge.d0.ocean && edge.d1.ocean) minLength = 100;
                 if (edge.river || edge.lava) minLength = 1;
                 
@@ -1668,11 +1671,17 @@ package {
 
       var seedLabel:TextField = makeButton("Shape #", 25, y+22, 50, null);
       
-      islandSeedInput = makeButton("5040", 75, y+22, 44, null);
+      islandSeedInput = makeButton("67131", 75, y+22, 44, null);
       islandSeedInput.background = true;
       islandSeedInput.backgroundColor = 0xccddcc;
       islandSeedInput.selectable = true;
       islandSeedInput.type = TextFieldType.INPUT;
+      islandSeedInput.addEventListener(KeyboardEvent.KEY_UP, function (e:KeyboardEvent):void {
+          if (e.keyCode == 13) {
+            newIsland(islandType);
+            go();
+          }
+        });
 
       function markActiveIslandShape(type:String):void {
         mapTypes[islandType].backgroundColor = 0xffffcc;
