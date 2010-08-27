@@ -67,8 +67,8 @@ package {
     // type of island. The islandShape function uses both of them to
     // determine whether any point should be water or land.
     public var islandType:String = 'Perlin';
-    public var islandShape:Function;
-
+    static public var islandSeedInitial:int = 85882;
+    
     // GUI for controlling the map generation and view
     public var controls:Sprite = new Sprite();
     public var islandSeedInput:TextField;
@@ -89,7 +89,7 @@ package {
     // The map data
     public var map:voronoi_set;
 
-    
+
     public function mapgen2() {
       stage.scaleMode = 'noScale';
       stage.align = 'TL';
@@ -771,7 +771,7 @@ package {
 
       var seedLabel:TextField = makeButton("Shape #", 25, y+22, 50, null);
       
-      islandSeedInput = makeButton("67131", 75, y+22, 44, null);
+      islandSeedInput = makeButton(islandSeedInitial.toString(), 75, y+22, 44, null);
       islandSeedInput.background = true;
       islandSeedInput.backgroundColor = 0xccddcc;
       islandSeedInput.selectable = true;
@@ -825,7 +825,7 @@ package {
 
     
     public function addViewButtons():void {
-      var y:int = 150;
+      var y:int = 300;
 
       function markViewButton(mode:String):void {
         views[mapMode].backgroundColor = 0xffffcc;
@@ -866,19 +866,20 @@ package {
 
                
     public function addExportButtons():void {
-      controls.addChild(makeButton("Export Bitmaps:", 25, 350, 150, null));
+      var y:Number = 450;
+      controls.addChild(makeButton("Export Bitmaps:", 25, y, 150, null));
                
-      controls.addChild(makeButton("Elevation", 50, 372, 100,
+      controls.addChild(makeButton("Elevation", 50, y+22, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('elevation'), 'elevation.data');
                             e.stopPropagation();
                           }));
-      controls.addChild(makeButton("Moisture", 50, 394, 100,
+      controls.addChild(makeButton("Moisture", 50, y+44, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('moisture'), 'moisture.data');
                             e.stopPropagation();
                           }));
-      controls.addChild(makeButton("Overrides", 50, 416, 100,
+      controls.addChild(makeButton("Overrides", 50, y+66, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('overrides'), 'overrides.data');
                             e.stopPropagation();
