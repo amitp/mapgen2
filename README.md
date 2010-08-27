@@ -2,28 +2,32 @@ After working on a [Perlin-noise-based map
 generator](http://simblob.blogspot.com/2010/01/simple-map-generation.html)
 I had wanted something with islands and rivers and volcanoes and
 lava. However, I had a lot of trouble getting that map generator to
-generate any more than what it did at first. This project is my
-exploration of many different techniques for map generation.
+generate any more than what it did at first. This project was my
+exploration of several different techniques for map generation.
 
 The goal is to make continent/island style maps (surrounded by water)
-that can be used by a variety of games. The implementation will be a
-standalone C++ binary (or library).  
+that can be used by a variety of games. I had originally intended to
+write a reusable C++ library but ended up writing the code in
+Actionscript.
 
-Nice to have:
+The most important features I want are nice island/continent
+coastlines, mountains, and rivers. Non goals include impassable areas
+(except for the ocean), maze-like structures, or realistic height
+maps. The high level approach is to
 
-*   **Size independence**. Generate roughly the same map at various sizes. Intended use would be to generate lots of small maps, then rate them (either by machine or by human), and generate detail maps for the best ones.
+  1. Make a coastline.
+  2. Set elevation to distance from coastline. Mountains are farthest from the coast.
+  3. Create rivers in valleys, flowing down to the coast.
 
-*   **Nameable areas**. Forests, oceans, rivers, swamps, deserts, mountains, etc. would all be better with names.
-
-*   **Vector features** such as rivers and roads would be more useful than a bunch of tiles, so that you can use them in pathfinding and other game features. Depending on how experiments go, it may be useful to make the entire map vector based.
-
-Non-goals:
-
-*   **Impassable areas**, except for the ocean surrounding the continent.
-
-*   **Maze-like structures**, or areas that are disproportionately difficult to reach compared to the bird's eye distance. In particular, long peninsulas or bays are undesirable. These same features look neat on maps though, so I may change my mind. Maybe the games can have bridges or boats or other transportation shortcuts.
-
-*   **Realistic height maps**.  My goal is to make interesting 2D overhead maps, and not 3D terrain.
+The implementation generates a vector map with roughly 1,000 polygons,
+instead of a tile/grid map with roughly 1,000,000 tiles.  In games the
+polygons can be used for distinct areas with their own story and
+personality, places for towns and resources, quest locations,
+conquerable territory, etc.  Polygon boundaries are used for
+rivers. Polygon-to-polygon routes are used for roads. Forests, oceans,
+rivers, swamps, etc. can be named. Polygons are rendered into a bitmap
+to produce the tile map, but the underlying polygon structure is still
+available.
 
 History:
 
@@ -35,7 +39,11 @@ History:
 
 ** Notes
 
-*   http://en.wikipedia.org/wiki/Drainage_basin — watersheds are sometimes computed using voronoi; watersheds form boundaries between regions
+* http://en.wikipedia.org/wiki/Drainage_basin — watersheds are
+    sometimes computed using voronoi; watersheds form boundaries
+    between regions
 
-*   Compiling prototypes/voronoi_set.as requires my fork of as3delaunay: http://github.com/amitp/as3delaunay
+* Compiling prototypes/voronoi_set.as requires my fork of as3delaunay:
+    http://github.com/amitp/as3delaunay as well as
+    de.polygonal.math.PM_PRNG.as
 
