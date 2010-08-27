@@ -8,7 +8,7 @@ package graph {
     public var path0:Vector.<Point>, path1:Vector.<Point>;
     public var midpoint:Point;
     public var river:Number;
-    public var road:Boolean;
+    public var road:int;  // difficulty level
     public var lava:Boolean;
   };
 }

@@ -30,7 +30,9 @@ package {
       MARSH: 0x2f6666,
       ICE: 0x99ffff,
       BEACH: 0xa09077,
-      ROAD: 0x664433,
+      ROAD1: 0x442211,
+      ROAD2: 0x553322,
+      ROAD3: 0x664433,
       LAVA: 0xcc3333,
 
       // Terrain
@@ -460,10 +462,10 @@ package {
             edges = p.edges;
             for (i = 0; i < edges.length; i++) {
               edge1 = edges[i];
-              if (edge1.road) {
+              if (edge1.road > 0) {
                 for (j = i+1; j < edges.length; j++) {
                   edge2 = edges[j];
-                  if (edge2.road) {
+                  if (edge2.road > 0) {
                     // The spline connects the midpoints of the edges
                     // and at right angles to them. In between we
                     // generate two control points A and B and one
@@ -475,9 +477,10 @@ package {
                     A = normalTowards(edge1, p.point, d).add(edge1.midpoint);
                     B = normalTowards(edge2, p.point, d).add(edge2.midpoint);
                     C = Point.interpolate(A, B, 0.5);
-                    graphics.lineStyle(1.1, colors.ROAD);
+                    graphics.lineStyle(1.1, colors['ROAD'+edge1.road]);
                     graphics.moveTo(edge1.midpoint.x, edge1.midpoint.y);
                     graphics.curveTo(A.x, A.y, C.x, C.y);
+                    graphics.lineStyle(1.1, colors['ROAD'+edge2.road]);
                     graphics.curveTo(B.x, B.y, edge2.midpoint.x, edge2.midpoint.y);
                     graphics.lineStyle();
                   }
@@ -488,10 +491,10 @@ package {
           if (p.road_connections && p.road_connections != 2) {
             // Intersection: draw a road spline from each edge to the center
             for each (edge1 in p.edges) {
-                if (edge1.road) {
+                if (edge1.road > 0) {
                   d = 0.25*edge1.midpoint.subtract(p.point).length;
                   A = normalTowards(edge1, p.point, d).add(edge1.midpoint);
-                  graphics.lineStyle(1.4, colors.ROAD);
+                  graphics.lineStyle(1.4, colors['ROAD'+edge1.road]);
                   graphics.moveTo(edge1.midpoint.x, edge1.midpoint.y);
                   graphics.curveTo(A.x, A.y, p.point.x, p.point.y);
                   graphics.lineStyle();
@@ -654,7 +657,7 @@ package {
     static public var exportOverrideColors:Object = {
       /* override codes are 0:none, 0x10:river water, 0x20:lava,
          0x30:snow, 0x40:ice, 0x50:ocean, 0x60:lake, 0x70:lake shore,
-         0x80:ocean shore, 0x90:road.  These are ORed with 0x01:
+         0x80:ocean shore, 0x90,0xa0,0xb0:road.  These are ORed with 0x01:
          polygon center, 0x02: safe polygon center. */
       POLYGON_CENTER: 0x01,
       POLYGON_CENTER_SAFE: 0x03,
@@ -667,7 +670,9 @@ package {
       ICE: 0x40,
       LAVA: 0x20,
       SNOW: 0x30,
-      ROAD: 0x90
+      ROAD1: 0x90,
+      ROAD2: 0xa0,
+      ROAD3: 0xb0
     };
 
     static public var exportElevationColors:Object = {

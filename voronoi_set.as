@@ -812,7 +812,7 @@ package {
           for each (edge in p.edges) {
               if (edge.v0 && edge.v1
                   && edge.v0.contour != edge.v1.contour) {
-                edge.road = true;
+                edge.road = Math.min(edge.v0.contour, edge.v1.contour);
                 p.road_connections = (p.road_connections || 0) + 1;
               }
             }
