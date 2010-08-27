@@ -167,6 +167,108 @@ package {
       Debug.trace("TIME for rendering:", getTimer()-t);
     }
 
+
+    // Show some information about the maps
+    private static var _biomeMap:Array =
+      ['BEACH', 'LAKE', 'ICE', 'MARSH', 'SNOW', 'TUNDRA', 'BARE', 'SCORCHED',
+       'TAIGA', 'SHRUBLAND', 'TEMPERATE_DESERT', 'TEMPERATE_RAIN_FOREST',
+       'TEMPERATE_DECIDUOUS_FOREST', 'GRASSLAND', 'SUBTROPICAL_DESERT',
+       'TROPICAL_RAIN_FOREST', 'TROPICAL_SEASONAL_FOREST'];
+    public function drawHistograms():void {
+      // There are pairs of functions for each chart. The bucket
+      // function maps the polygon Center to a small int, and the
+      // color function maps the int to a color.
+      function landTypeBucket(p:Center):int {
+        if (p.ocean) return 1;
+        else if (p.coast) return 2;
+        else if (p.water) return 3;
+        else return 4;
+      }
+      function landTypeColor(bucket:int):uint {
+        if (bucket == 1) return displayColors.OCEAN;
+        else if (bucket == 2) return displayColors.BEACH;
+        else if (bucket == 3) return displayColors.LAKE;
+        else return displayColors.TEMPERATE_DECIDUOUS_FOREST;
+      }
+      function elevationBucket(p:Center):int {
+        if (p.ocean) return -1;
+        else return Math.floor(p.elevation*10);
+      }
+      function elevationColor(bucket:int):uint {
+        return interpolateColor(displayColors.TEMPERATE_DECIDUOUS_FOREST,
+                                displayColors.GRASSLAND, bucket*0.1);
+      }
+      function moistureBucket(p:Center):int {
+        if (p.water) return -1;
+        else return Math.floor(p.moisture*10);
+      }
+      function moistureColor(bucket:int):uint {
+        return interpolateColor(displayColors.BEACH, displayColors.RIVER, bucket*0.1);
+      }
+      function biomeBucket(p:Center):int {
+        return _biomeMap.indexOf(p.biome);
+      }
+      function biomeColor(bucket:int):uint {
+        return displayColors[_biomeMap[bucket]];
+      }
+
+      function computeHistogram(bucketFn:Function):Array {
+        var p:Center, histogram:Array, bucket:int;
+        histogram = [];
+        for each (p in map.centers) {
+            bucket = bucketFn(p);
+            if (bucket >= 0) histogram[bucket] = (histogram[bucket] || 0) + 1;
+          }
+        return histogram;
+      }
+      
+      function drawHistogram(x:Number, y:Number, bucketFn:Function, colorFn:Function,
+                             width:Number, height:Number):void {
+        var scale:Number, i:int;
+        var histogram:Array = computeHistogram(bucketFn);
+        
+        scale = 0.0;
+        for (i = 0; i < histogram.length; i++) {
+          scale = Math.max(scale, histogram[i] || 0);
+        }
+        for (i = 0; i < histogram.length; i++) {
+          if (histogram[i]) {
+            graphics.beginFill(colorFn(i));
+            graphics.drawRect(SIZE+x+i*width/histogram.length, y+height,
+                              Math.max(0, width/histogram.length-1), -height*histogram[i]/scale);
+            graphics.endFill();
+          }
+        }
+      }
+
+      function drawDistribution(x:Number, y:Number, bucketFn:Function, colorFn:Function,
+                                width:Number, height:Number):void {
+        var scale:Number, i:int, x:Number, w:Number;
+        var histogram:Array = computeHistogram(bucketFn);
+      
+        scale = 0.0;
+        for (i = 0; i < histogram.length; i++) {
+          scale += histogram[i] || 0.0;
+        }
+        for (i = 0; i < histogram.length; i++) {
+          if (histogram[i]) {
+            graphics.beginFill(colorFn(i));
+            w = histogram[i]/scale*width;
+            graphics.drawRect(SIZE+x, y, Math.max(0, w-1), height);
+            x += w;
+            graphics.endFill();
+          }
+        }
+      }
+
+      var x:Number = 23, y:Number = 140, width:Number = 154;
+      drawDistribution(x, y, landTypeBucket, landTypeColor, width, 20);
+      drawDistribution(x, y+25, biomeBucket, biomeColor, width, 20);
+
+      drawHistogram(x, y+55, elevationBucket, elevationColor, width, 30);
+      drawHistogram(x, y+95, moistureBucket, moistureColor, width, 20);
+    }
+
     
     // Helper functions for rendering paths
     private function drawPathForwards(graphics:Graphics, path:Vector.<Point>):void {
@@ -242,6 +344,8 @@ package {
     public function drawMap():void {
       graphicsReset();
       noiseLayer.visible = true;
+      
+      drawHistograms();
       
       if (mapMode == '3d') {
         if (!render3dTimer.running) render3dTimer.start();
@@ -852,6 +956,7 @@ package {
 
       markViewButton(mapMode);
       
+      controls.addChild(makeButton("Distribution:", 50, 120, 100, null));
       controls.addChild(makeButton("View:", 50, y, 100, null));
       
       controls.addChild(views.biome);
