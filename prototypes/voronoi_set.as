@@ -896,7 +896,7 @@ package {
       // to contour level K, gets contour level K+1.
       var queue:Array = [];
       var p:Center, q:Corner, r:Center, edge:Edge, newLevel:int;
-      var elevationThresholds:Array = [0, 0.05, 0.25, 0.55, 1.0];
+      var elevationThresholds:Array = [0, 0.05, 0.37, 0.64, 1.0];
 
       for each (p in centers) {
           if (p.coast || p.ocean) {
