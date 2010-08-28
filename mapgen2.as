@@ -73,6 +73,7 @@ package {
     public var controls:Sprite = new Sprite();
     public var islandSeedInput:TextField;
     public var mapSeedOutput:TextField;
+    public var statusBar:TextField;
 
     // This is the current map style. UI buttons change this, and it
     // persists when you make a new map. The timer is used only when
@@ -106,6 +107,7 @@ package {
       addExportButtons();
       addViewButtons();
       addGenerateButtons();
+      addMiscLabels();
 
       map = new voronoi_set(SIZE);
       newIsland(islandType);
@@ -158,13 +160,17 @@ package {
     
     public function go():void {
       mapSeedOutput.text = map.mapRandom.seed.toString();
+      statusBar.text = "Generating map...";
       map.go();
 
       // Render the polygons first, including polygon edges
       // (coastline, lakeshores), then other edges (rivers, lava).
       var t:Number = getTimer();
+      statusBar.text = "Rendering map...";
       drawMap();
       Debug.trace("TIME for rendering:", getTimer()-t);
+
+      statusBar.text = "";
     }
 
 
@@ -956,7 +962,6 @@ package {
 
       markViewButton(mapMode);
       
-      controls.addChild(makeButton("Distribution:", 50, 120, 100, null));
       controls.addChild(makeButton("View:", 50, y, 100, null));
       
       controls.addChild(views.biome);
@@ -967,6 +972,13 @@ package {
       controls.addChild(views.moisture);
       controls.addChild(views.polygons);
       controls.addChild(views.watersheds);
+    }
+
+
+    public function addMiscLabels():void {
+      controls.addChild(makeButton("Distribution:", 50, 120, 100, null));
+      statusBar = makeButton("", 50, 550, 100, null);
+      controls.addChild(statusBar);
     }
 
                
