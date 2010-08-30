@@ -96,29 +96,23 @@ package {
     public function go():void {
       reset();
       
-      var i:int, j:int, t:Number;
-      var p:Center, q:Corner, r:Center, s:Corner, point:Point;
+      var points:Vector.<Point>;
       var t0:Number = getTimer();
 
+      function timeIt(name:String, fn:Function):void {
+        var t:Number = getTimer();
+        fn();
+        Debug.trace("TIME for", name, ":", getTimer()-t);
+      }
       
       // Generate the initial random set of points
-      t = getTimer();
-      var points:Vector.<Point> = generateRandomPoints();
-      Debug.trace("TIME for random points:", getTimer()-t);
-
-
-      // Improve the quality of that set by spacing them better
-      t = getTimer();
-      improveRandomPoints(points);
-      Debug.trace("TIME for improving point set:", getTimer()-t);
+      timeIt("Place points...",
+             function():void {
+               points = generateRandomPoints();
+               improveRandomPoints(points);
+             });
 
       
-      // Build the Voronoi structure with our random points
-      t = getTimer();
-      var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
-      Debug.trace("TIME for voronoi:", getTimer()-t);
-
-
       // Create a graph structure from the Voronoi edge list. The
       // methods in the Voronoi object are somewhat inconvenient for
       // my needs, so I transform that data into the data I actually
@@ -126,98 +120,72 @@ package {
       // Voronoi polygons, a reverse map from those four points back
       // to the edge, a map from these four points to the points
       // they connect to (both along the edge and crosswise).
-      t = getTimer();
-      buildGraph(points, voronoi);
-      voronoi.dispose();
-      voronoi = null;
-      Debug.trace("TIME for buildGraph:", getTimer()-t);
+      timeIt("Build graph...",
+             function():void {
+               var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
+               buildGraph(points, voronoi);
+               voronoi.dispose();
+               voronoi = null;
+               points = null;
+             });
+
+      timeIt("Assign elevations...",
+             function():void {
+               // Determine the elevations and water at Voronoi corners.
+               assignCornerElevations();
+
+               // Determine polygon and corner type: ocean, coast, land.
+               assignOceanCoastAndLand();
+
+               // Rescale elevations so that the highest is 1.0, and they're
+               // distributed well. We want lower elevations to be more common
+               // than higher elevations, in proportions approximately matching
+               // concentric rings. That is, the lowest elevation is the
+               // largest ring around the island, and therefore should more
+               // land area than the highest elevation, which is the very
+               // center of a perfectly circular island.
+               var landPoints:Vector.<Corner> = new Vector.<Corner>();  // only non-ocean
+               for each (var q:Corner in corners) {
+                   if (q.ocean || q.coast) {
+                     q.elevation = 0.0;
+                   } else {
+                     landPoints.push(q);
+                   }
+                 }
+               for (var i:int = 0; i < 10; i++) {
+                 redistributeElevations(landPoints);
+               }
       
-      
-      // Determine the elevations and water at Voronoi corners.
-      t = getTimer();
-      assignCornerElevations();
-      Debug.trace("TIME for corner elevations:", getTimer()-t);
+               // Polygon elevations are the average of their corners
+               assignPolygonElevations();
+             });
+             
+
+      timeIt("Assign moisture...",
+             function():void {
+               // Determine downslope paths.
+               calculateDownslopes();
 
 
-      // Determine polygon and corner type: ocean, coast, land.
-      t = getTimer();
-      assignOceanCoastAndLand();
-      Debug.trace("TIME for ocean/coast/land:", getTimer()-t);
-
-      
-      // Rescale elevations so that the highest is 1.0, and they're
-      // distributed well. We want lower elevations to be more common
-      // than higher elevations, in proportions approximately matching
-      // concentric rings. That is, the lowest elevation is the
-      // largest ring around the island, and therefore should more
-      // land area than the highest elevation, which is the very
-      // center of a perfectly circular island.
-      t = getTimer();
-
-      var landPoints:Vector.<Corner> = new Vector.<Corner>();  // only non-ocean
-      for each (q in corners) {
-          if (q.ocean || q.coast) {
-            q.elevation = 0.0;
-          } else {
-            landPoints.push(q);
-          }
-        }
-      for (i = 0; i < 10; i++) {
-        redistributeElevations(landPoints);
-      }
-      landPoints.splice(0, landPoints.length);
-      Debug.trace("TIME for elevation rescaling:", getTimer()-t);
-
-      
-      // Polygon elevations are the average of their corners
-      t = getTimer();
-      assignPolygonElevations();
-      Debug.trace("TIME for polygon elevations:", getTimer()-t);
-      
-
-      // Determine downslope paths.
-      t = getTimer();
-      calculateDownslopes();
-      Debug.trace("TIME for downslope paths:", getTimer()-t);
-
-
-      // Determine watersheds: for every corner, where does it flow
-      // out into the ocean? 
-      t = getTimer();
-      i = calculateWatersheds();
-      Debug.trace("TIME for", i, "steps of watershed:", getTimer()-t);
+               // Determine watersheds: for every corner, where does it flow
+               // out into the ocean? 
+               calculateWatersheds();
 
       
-      // Create rivers.
-      t = getTimer();
-      createRivers();
-      Debug.trace("TIME for river paths:", getTimer()-t);
+               // Create rivers.
+               createRivers();
 
       
-      // Calculate moisture, starting at rivers and lakes, but not oceans.
-      t = getTimer();
-      calculateMoisture();
-      Debug.trace("TIME for moisture calculation:", getTimer()-t);
+               // Calculate moisture, starting at rivers and lakes, but not oceans.
+               calculateMoisture();
+             });
 
-
-      // Create lava.
-      t = getTimer();
-      createLava();
-      Debug.trace("TIME for lava:", getTimer()-t);
-
-      
-      // Choose polygon biomes based on elevation, water, ocean
-      t = getTimer();
-      assignBiomes();
-      Debug.trace("TIME for biome assignment:", getTimer()-t);
-
-
-      // Mark areas in each contour area and place roads along the
-      // contour lines.
-      t = getTimer();
-      createRoads();
-      Debug.trace("TIME for roads:", getTimer()-t);
-      
+      timeIt("Decorate map...",
+             function():void {
+               createLava();
+               assignBiomes();
+               createRoads();
+             });
       
       // For all edges between polygons, build a noisy line path that
       // we can reuse while drawing both polygons connected to that
@@ -225,9 +193,7 @@ package {
       // from the vertex to the midpoint. We don't construct the noisy
       // lines from the polygon centers to the midpoints, because
       // they're not needed for polygon filling.
-      t = getTimer();
-      buildNoisyEdges();
-      Debug.trace("TIME for noisy edge construction:", getTimer()-t);
+      timeIt("Add noise...", buildNoisyEdges);
 
 
       Debug.trace("MEMORY AFTER:", System.totalMemory, " TIME taken:", getTimer()-t0,"ms");
@@ -644,7 +610,7 @@ package {
     // watersheds are currently calculated on corners, but it'd be
     // more useful to compute them on polygon centers so that every
     // polygon can be marked as being in one watershed.
-    public function calculateWatersheds():int {
+    public function calculateWatersheds():void {
       var q:Corner, r:Corner, i:int, changed:Boolean;
       
       // Initially the watershed pointer points downslope one step.      
@@ -675,7 +641,6 @@ package {
           r = q.watershed;
           r.watershed_size = 1 + (r.watershed_size || 0);
         }
-      return i;
     }
 
 
