@@ -15,7 +15,7 @@ package {
   import flash.system.System;
   import de.polygonal.math.PM_PRNG;
 
-  [SWF(width="800", height="600")]
+  [SWF(width="800", height="600", frameRate=60)]
   public class mapgen2 extends Sprite {
     static public var SIZE:int = 600;
     static public var NOISY_LINE_TRADEOFF:Number = 0.5;  // low: jagged vedge; high: jagged dedge
@@ -110,8 +110,7 @@ package {
       addMiscLabels();
 
       map = new voronoi_set(SIZE);
-      newIsland(islandType);
-      go();
+      go(islandType);
       
       render3dTimer.addEventListener(TimerEvent.TIMER, function (e:TimerEvent):void {
           drawMap();
@@ -121,6 +120,8 @@ package {
     
     // Random parameters governing the overall shape of the island
     public function newIsland(type:String):void {
+      var t:Number = getTimer();
+      
       if (islandSeedInput.text.length == 0) {
         islandSeedInput.text = (Math.random()*100000).toFixed(0);
       }
@@ -136,18 +137,13 @@ package {
       }
       islandType = type;
       map.newIsland(type, seed);
+
+      Debug.trace("TIME for island", type, ":", getTimer()-t);
     }
 
     
-    public function reset():void {
-      // Reset the 3d triangle data
-      triangles3d = [];
-      
-      map.reset();
-    }
-      
-
     public function graphicsReset():void {
+      triangles3d = [];
       graphics.clear();
       graphics.beginFill(0x555599);
       graphics.drawRect(0, 0, SIZE, 2000);
@@ -158,22 +154,60 @@ package {
     }
 
     
-    public function go():void {
-      mapSeedOutput.text = map.mapRandom.seed.toString();
-      statusBar.text = "Generating map...";
-      map.go();
+    public function go(type:String):void {
+      cancelCommands();
 
-      // Render the polygons first, including polygon edges
-      // (coastline, lakeshores), then other edges (rivers, lava).
-      var t:Number = getTimer();
-      statusBar.text = "Rendering map...";
-      drawMap();
-      Debug.trace("TIME for rendering:", getTimer()-t);
-
-      statusBar.text = "";
+      commandExecute("Shaping map...",
+                     function():void {
+                       newIsland(type);
+                     });
+      
+      commandExecute("Generating map...",
+                     function():void {
+                       mapSeedOutput.text = map.mapRandom.seed.toString();
+                       map.go();
+                     });
+      
+      commandExecute("Rendering map...",
+                     function():void {
+                       var t:Number = getTimer();
+                       drawMap();
+                       Debug.trace("TIME for rendering:", getTimer()-t);
+                     });
     }
 
 
+    // Command queue is processed on ENTER_FRAME. If it's empty,
+    // remove the handler.
+    private var _guiQueue:Array = [];
+    private function _onEnterFrame(e:Event):void {
+      if (_guiQueue.length == 0) Debug.trace("ERROR: command queue empty");
+      (_guiQueue.shift()[1])();
+      if (_guiQueue.length == 0) {
+        stage.removeEventListener(Event.ENTER_FRAME, _onEnterFrame);
+        statusBar.text = "";
+      } else {
+        statusBar.text = _guiQueue[0][0];
+      }
+    }
+
+    public function cancelCommands():void {
+      if (_guiQueue.length != 0) {
+        stage.removeEventListener(Event.ENTER_FRAME, _onEnterFrame);
+        statusBar.text = "";
+        _guiQueue = [];
+      }
+    }
+
+    public function commandExecute(status:String, command:Function):void {
+      if (_guiQueue.length == 0) {
+        statusBar.text = status;
+        stage.addEventListener(Event.ENTER_FRAME, _onEnterFrame);
+      }
+      _guiQueue.push([status, command]);
+    }
+
+    
     // Show some information about the maps
     private static var _biomeMap:Array =
       ['BEACH', 'LAKE', 'ICE', 'MARSH', 'SNOW', 'TUNDRA', 'BARE', 'SCORCHED',
@@ -888,8 +922,7 @@ package {
       islandSeedInput.type = TextFieldType.INPUT;
       islandSeedInput.addEventListener(KeyboardEvent.KEY_UP, function (e:KeyboardEvent):void {
           if (e.keyCode == 13) {
-            newIsland(islandType);
-            go();
+            go(islandType);
           }
         });
 
@@ -901,8 +934,7 @@ package {
       function switcher(type:String):Function {
         return function(e:Event):void {
           markActiveIslandShape(type);
-          newIsland(type);
-          go();
+          go(type);
         }
       }
       
@@ -920,8 +952,7 @@ package {
       controls.addChild(makeButton("Random", 121, y+22, 56,
                                    function (e:Event):void {
                                      islandSeedInput.text = (Math.random()*100000).toFixed(0);
-                                     newIsland(islandType);
-                                     go();
+                                     go(islandType);
                                    }));
       controls.addChild(mapTypes.Radial);
       controls.addChild(mapTypes.Perlin);
@@ -977,8 +1008,8 @@ package {
 
     public function addMiscLabels():void {
       controls.addChild(makeButton("Distribution:", 50, 120, 100, null));
-      statusBar = makeButton("", 50, 550, 100, null);
-      controls.addChild(statusBar);
+      statusBar = makeButton("", SIZE/2-50, 10, 100, null);
+      addChild(statusBar);
     }
 
                
