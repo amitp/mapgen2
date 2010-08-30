@@ -870,8 +870,8 @@ package {
         }
 
         // Subdivide the quadrilateral
-        var p:Number = random.nextDoubleRange(0.1, 0.9);  // vertical (along A-D and B-C)
-        var q:Number = random.nextDoubleRange(0.1, 0.9);  // horizontal (along A-B and D-C)
+        var p:Number = random.nextDoubleRange(0.2, 0.8);  // vertical (along A-D and B-C)
+        var q:Number = random.nextDoubleRange(0.2, 0.8);  // horizontal (along A-B and D-C)
 
         // Midpoints
         var E:Point = Point.interpolate(A, D, p);
@@ -917,6 +917,7 @@ package {
                 var minLength:int = 10;
                 if (edge.d0.biome != edge.d1.biome) minLength = 3;
                 if (edge.d0.ocean && edge.d1.ocean) minLength = 100;
+                if (edge.d0.coast || edge.d1.coast) minLength = 1;
                 if (edge.river || edge.lava) minLength = 1;
                 
                 edge.path0 = buildNoisyLineSegments(mapRandom, edge.v0.point, t, edge.midpoint, q, minLength);
