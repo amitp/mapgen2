@@ -5,6 +5,7 @@ package graph {
     public var index:int;
   
     public var point:Point;
+    public var water:Boolean;  // lake or ocean
     public var ocean:Boolean;
     public var water:int;
     public var coast:Boolean;

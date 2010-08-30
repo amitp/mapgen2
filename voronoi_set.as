@@ -549,9 +549,10 @@ package {
       // in the second pass, mark any water-containing polygon
       // connected an ocean as ocean.
       var queue:Array = [];
-      var p:Center, q:Corner, r:Center;
+      var p:Center, q:Corner, r:Center, numWater:int;
       
       for each (p in centers) {
+          numWater = 0;
           for each (q in p.corners) {
               if (q.border) {
                 p.border = true;
@@ -560,12 +561,10 @@ package {
                 queue.push(p);
               }
               if (q.water) {
-                p.water = (p.water || 0) + 1;
+                numWater += 1;
               }
             }
-          if (!p.ocean && p.water < p.corners.length * LAKE_THRESHOLD) {
-            p.water = 0;
-          }
+          p.water = (p.ocean || numWater >= p.corners.length * LAKE_THRESHOLD);
         }
       while (queue.length > 0) {
         p = queue.shift();
