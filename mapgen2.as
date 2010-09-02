@@ -33,6 +33,7 @@ package {
       ROAD1: 0x442211,
       ROAD2: 0x553322,
       ROAD3: 0x664433,
+      BRIDGE: 0x686860,
       LAVA: 0xcc3333,
 
       // Terrain
@@ -441,9 +442,6 @@ package {
       if (mode != 'polygons') {
         renderEdges(graphics, displayColors);
       }
-      if (mode != 'slopes' && mode != 'moisture') {
-        renderBridges(graphics, displayColors);
-      }
     }
 
 
@@ -602,6 +600,31 @@ package {
     }
 
 
+    // Render bridges across every narrow river edge. Bridges are
+    // straight line segments perpendicular to the edge. Bridges are
+    // drawn after rivers. TODO: sometimes the bridges aren't long
+    // enough to cross the entire noisy line river. TODO: bridges
+    // don't line up with curved road segments when there are
+    // roads. It might be worth making a shader that draws the bridge
+    // only when there's water underneath.
+    public function renderBridges(graphics:Graphics, colors:Object):void {
+      var edge:Edge;
+
+      for each (edge in map.edges) {
+          if (edge.river > 0 && edge.river < 4
+              && !edge.d0.water && !edge.d1.water
+              && (edge.d0.elevation > 0.05 || edge.d1.elevation > 0.05)) {
+            var n:Point = new Point(-(edge.v1.point.y - edge.v0.point.y), edge.v1.point.x - edge.v0.point.x);
+            n.normalize(0.25 + ((edge.road > 0)? 0.5 : 0) + 0.75*Math.sqrt(edge.river));
+            graphics.lineStyle(1.1, colors.BRIDGE, 1.0, false, LineScaleMode.NORMAL, CapsStyle.SQUARE);
+            graphics.moveTo(edge.midpoint.x - n.x, edge.midpoint.y - n.y);
+            graphics.lineTo(edge.midpoint.x + n.x, edge.midpoint.y + n.y);
+            graphics.lineStyle();
+          }
+        }
+    }
+
+    
     // Render roads. We draw these before polygon edges, so that rivers overwrite roads.
     public function renderRoads(graphics:Graphics, colors:Object):void {
       // First draw the roads, because any other feature should draw
@@ -750,7 +773,7 @@ package {
               }
             }
           graphics.endFill();
-          graphics.beginFill(p.water > 0 ? 0x00ffff : p.ocean? 0xff0000 : 0x000000, 0.7);
+          graphics.beginFill(p.water > 0 ? 0x003333 : 0x000000, 0.7);
           graphics.drawCircle(p.point.x, p.point.y, 1.3);
           graphics.endFill();
           for each (q in p.corners) {
@@ -838,8 +861,9 @@ package {
     static public var exportOverrideColors:Object = {
       /* override codes are 0:none, 0x10:river water, 0x20:lava,
          0x30:snow, 0x40:ice, 0x50:ocean, 0x60:lake, 0x70:lake shore,
-         0x80:ocean shore, 0x90,0xa0,0xb0:road.  These are ORed with 0x01:
-         polygon center, 0x02: safe polygon center. */
+         0x80:ocean shore, 0x90,0xa0,0xb0:road, 0xc0:bridge.  These
+         are ORed with 0x01: polygon center, 0x02: safe polygon
+         center. */
       POLYGON_CENTER: 0x01,
       POLYGON_CENTER_SAFE: 0x03,
       OCEAN: 0x50,
@@ -853,7 +877,8 @@ package {
       SNOW: 0x30,
       ROAD1: 0x90,
       ROAD2: 0xa0,
-      ROAD3: 0xb0
+      ROAD3: 0xb0,
+      BRIDGE: 0xc0
     };
 
     static public var exportElevationColors:Object = {
@@ -892,6 +917,7 @@ package {
         renderPolygons(exportGraphics.graphics, exportOverrideColors, null, null);
         renderRoads(exportGraphics.graphics, exportOverrideColors);
         renderEdges(exportGraphics.graphics, exportOverrideColors);
+        renderBridges(exportGraphics.graphics, exportOverrideColors);
 
         stage.quality = 'low';
         exportBitmap.draw(exportGraphics, m);
