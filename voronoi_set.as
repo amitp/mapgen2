@@ -35,6 +35,7 @@ package {
     public var mapRandom:PM_PRNG = new PM_PRNG(100);
 
     // These store the graph data
+    public var points:Vector.<Point>;  // Only useful during map construction
     public var centers:Vector.<Center>;
     public var corners:Vector.<Corner>;
     public var edges:Vector.<Edge>;
@@ -57,6 +58,9 @@ package {
       Debug.clear();
       
       // Break cycles so the garbage collector will release data.
+      if (points) {
+        points.splice(0, points.length);
+      }
       if (edges) {
         for each (edge in edges) {
             edge.d0 = edge.d1 = null;
@@ -84,20 +88,17 @@ package {
       }
 
       // Clear the previous graph data.
+      if (!points) points = new Vector.<Point>();
       if (!edges) edges = new Vector.<Edge>();
       if (!centers) centers = new Vector.<Center>();
       if (!corners) corners = new Vector.<Corner>();
       
       System.gc();
-      Debug.trace("MEMORY BEFORE:", System.totalMemory);
     }
       
 
-    public function go():void {
-      reset();
-      
-      var points:Vector.<Point>;
-      var t0:Number = getTimer();
+    public function go(first:int, last:int):void {
+      var stages:Array = [];
 
       function timeIt(name:String, fn:Function):void {
         var t:Number = getTimer();
@@ -106,11 +107,18 @@ package {
       }
       
       // Generate the initial random set of points
-      timeIt("Place points...",
-             function():void {
-               points = generateRandomPoints();
-               improveRandomPoints(points);
-             });
+      stages.push
+        (["Place points...",
+          function():void {
+            reset();
+            points = generateRandomPoints();
+          }]);
+
+      stages.push
+        (["Improve points...",
+          function():void {
+            improveRandomPoints(points);
+          }]);
 
       
       // Create a graph structure from the Voronoi edge list. The
@@ -120,16 +128,18 @@ package {
       // Voronoi polygons, a reverse map from those four points back
       // to the edge, a map from these four points to the points
       // they connect to (both along the edge and crosswise).
-      timeIt("Build graph...",
+      stages.push
+        ( ["Build graph...",
              function():void {
                var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
                buildGraph(points, voronoi);
                voronoi.dispose();
                voronoi = null;
                points = null;
-             });
+          }]);
 
-      timeIt("Assign elevations...",
+      stages.push
+        (["Assign elevations...",
              function():void {
                // Determine the elevations and water at Voronoi corners.
                assignCornerElevations();
@@ -158,10 +168,11 @@ package {
       
                // Polygon elevations are the average of their corners
                assignPolygonElevations();
-             });
+          }]);
              
 
-      timeIt("Assign moisture...",
+      stages.push
+        (["Assign moisture...",
              function():void {
                // Determine downslope paths.
                calculateDownslopes();
@@ -178,14 +189,15 @@ package {
       
                // Calculate moisture, starting at rivers and lakes, but not oceans.
                calculateMoisture();
-             });
+             }]);
 
-      timeIt("Decorate map...",
+      stages.push
+        (["Decorate map...",
              function():void {
                createLava();
                assignBiomes();
                createRoads();
-             });
+             }]);
       
       // For all edges between polygons, build a noisy line path that
       // we can reuse while drawing both polygons connected to that
@@ -193,10 +205,11 @@ package {
       // from the vertex to the midpoint. We don't construct the noisy
       // lines from the polygon centers to the midpoints, because
       // they're not needed for polygon filling.
-      timeIt("Add noise...", buildNoisyEdges);
+      stages.push(["Add noise...", buildNoisyEdges]);
 
-
-      Debug.trace("MEMORY AFTER:", System.totalMemory, " TIME taken:", getTimer()-t0,"ms");
+      for (var i:int = first; i < last; i++) {
+          timeIt(stages[i][0], stages[i][1]);
+        }
     }
 
     

@@ -113,7 +113,8 @@ package {
       go(islandType);
       
       render3dTimer.addEventListener(TimerEvent.TIMER, function (e:TimerEvent):void {
-          drawMap();
+          // TODO: don't draw this while the map is being built
+          drawMap(mapMode);
         });
     }
 
@@ -162,17 +163,37 @@ package {
                        newIsland(type);
                      });
       
-      commandExecute("Generating map...",
+      commandExecute("Placing points...",
                      function():void {
                        mapSeedOutput.text = map.mapRandom.seed.toString();
-                       map.go();
+                       map.go(0, 1);
+                       drawMap('polygons');
+                     });
+
+      commandExecute("Improving points...",
+                     function():void {
+                       map.go(1, 2);
+                       drawMap('polygons');
                      });
       
-      commandExecute("Rendering map...",
+      commandExecute("Building graph...",
                      function():void {
-                       var t:Number = getTimer();
-                       drawMap();
-                       Debug.trace("TIME for rendering:", getTimer()-t);
+                       map.go(2, 3);
+                       map.assignBiomes();
+                       drawMap('polygons');
+                     });
+      
+      commandExecute("Features...",
+                     function():void {
+                       map.go(3, 6);
+                       map.assignBiomes();
+                       drawMap('polygons');
+                     });
+
+      commandExecute("Edges...",
+                     function():void {
+                       map.go(6, 7);
+                       drawMap(mapMode);
                      });
     }
 
@@ -381,44 +402,47 @@ package {
     
 
     // Draw the map in the current map mode
-    public function drawMap():void {
+    public function drawMap(mode:String):void {
       graphicsReset();
       noiseLayer.visible = true;
       
       drawHistograms();
       
-      if (mapMode == '3d') {
+      if (mode == '3d') {
         if (!render3dTimer.running) render3dTimer.start();
         noiseLayer.visible = false;
         render3dPolygons(graphics, displayColors, colorWithSlope);
         return;
-      } else if (mapMode == 'polygons') {
+      } else if (mode == 'polygons') {
         noiseLayer.visible = false;
         renderDebugPolygons(graphics, displayColors);
-      } else if (mapMode == 'watersheds') {
+      } else if (mode == 'watersheds') {
         noiseLayer.visible = false;
         renderDebugPolygons(graphics, displayColors);
         renderWatersheds(graphics);
         return;
-      } else if (mapMode == 'biome') {
+      } else if (mode == 'biome') {
         renderPolygons(graphics, displayColors, null, null);
-      } else if (mapMode == 'slopes') {
+      } else if (mode == 'slopes') {
         renderPolygons(graphics, displayColors, null, colorWithSlope);
-      } else if (mapMode == 'smooth') {
+      } else if (mode == 'smooth') {
         renderPolygons(graphics, displayColors, null, colorWithSmoothColors);
-      } else if (mapMode == 'elevation') {
+      } else if (mode == 'elevation') {
         renderPolygons(graphics, elevationGradientColors, 'elevation', null);
-      } else if (mapMode == 'moisture') {
+      } else if (mode == 'moisture') {
         renderPolygons(graphics, moistureGradientColors, 'moisture', null);
       }
 
       if (render3dTimer.running) render3dTimer.stop();
 
-      if (mapMode != 'slopes' && mapMode != 'moisture') {
+      if (mode != 'slopes' && mode != 'moisture') {
         renderRoads(graphics, displayColors);
       }
-      if (mapMode != 'polygons') {
+      if (mode != 'polygons') {
         renderEdges(graphics, displayColors);
+      }
+      if (mode != 'slopes' && mode != 'moisture') {
+        renderBridges(graphics, displayColors);
       }
     }
 
@@ -695,10 +719,23 @@ package {
 
     // Render the polygons so that each can be seen clearly
     public function renderDebugPolygons(graphics:Graphics, colors:Object):void {
-      var p:Center, q:Corner, edge:Edge;
+      var p:Center, q:Corner, edge:Edge, point:Point, color:int;
 
+      if (map.centers.length == 0) {
+        // We're still constructing the map so we may have some points
+        graphics.beginFill(0xdddddd);
+        graphics.drawRect(0, 0, SIZE, SIZE);
+        graphics.endFill();
+        for each (point in map.points) {
+            graphics.beginFill(0x000000);
+            graphics.drawCircle(point.x, point.y, 1.3);
+            graphics.endFill();
+          }
+      }
+      
       for each (p in map.centers) {
-          graphics.beginFill(interpolateColor(colors[p.biome] || 0, 0xdddddd, 0.2));
+          color = colors[p.biome] || (p.ocean? colors.OCEAN : p.water? colors.RIVER : 0xffffff);
+          graphics.beginFill(interpolateColor(color, 0xdddddd, 0.2));
           for each (edge in p.edges) {
               if (edge.v0 && edge.v1) {
                 graphics.moveTo(p.point.x, p.point.y);
@@ -976,7 +1013,7 @@ package {
         return function(e:Event):void {
           markViewButton(mode);
           mapMode = mode;
-          drawMap();
+          drawMap(mapMode);
         }
       }
       
