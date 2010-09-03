@@ -12,8 +12,8 @@ package graph {
     public var elevation:Number;
     public var moisture:Number;
     public var edges:Vector.<Edge>;
-    public var neighbors:Vector.<Corner>;
-    public var corners:Vector.<Center>;
+    public var adjacent:Vector.<Corner>;
+    public var touches:Vector.<Center>;
     public var contour:int;
   
     public var river:int;

@@ -79,8 +79,8 @@ package {
       }
       if (corners) {
         for each (q in corners) {
-            q.neighbors.splice(0, q.neighbors.length);
-            q.corners.splice(0, q.corners.length);
+            q.adjacent.splice(0, q.adjacent.length);
+            q.touches.splice(0, q.touches.length);
             q.edges.splice(0, q.edges.length);
             q.downslope = null;
             q.watershed = null;
@@ -321,8 +321,8 @@ package {
         corners.push(q);
         q.point = point;
         q.edges = new Vector.<Edge>();
-        q.neighbors = new Vector.<Corner>();
-        q.corners = new Vector.<Center>();
+        q.adjacent = new Vector.<Corner>();
+        q.touches = new Vector.<Center>();
         _cornerMap[bucket].push(q);
         return q;
       }
@@ -365,8 +365,8 @@ package {
 
           // Corners point to corners
           if (edge.v0 != null && edge.v1 != null) {
-            addToCornerList(edge.v0.neighbors, edge.v1);
-            addToCornerList(edge.v1.neighbors, edge.v0);
+            addToCornerList(edge.v0.adjacent, edge.v1);
+            addToCornerList(edge.v1.adjacent, edge.v0);
           }
 
           // Centers point to corners
@@ -381,12 +381,12 @@ package {
 
           // Corners point to centers
           if (edge.v0 != null) {
-            addToCenterList(edge.v0.corners, edge.d0);
-            addToCenterList(edge.v0.corners, edge.d1);
+            addToCenterList(edge.v0.touches, edge.d0);
+            addToCenterList(edge.v0.touches, edge.d1);
           }
           if (edge.v1 != null) {
-            addToCenterList(edge.v1.corners, edge.d0);
-            addToCenterList(edge.v1.corners, edge.d1);
+            addToCenterList(edge.v1.touches, edge.d0);
+            addToCenterList(edge.v1.touches, edge.d1);
           }
         }
     }
@@ -425,7 +425,7 @@ package {
       while (queue.length > 0) {
         q = queue.shift();
 
-        for each (s in q.neighbors) {
+        for each (s in q.adjacent) {
             // Every step up is epsilon over water or 1 over land. The
             // number doesn't matter because we'll rescale the
             // elevations later.
@@ -577,13 +577,13 @@ package {
       for each (q in corners) {
           numOcean = 0;
           numLand = 0;
-          for each (p in q.corners) {
+          for each (p in q.touches) {
               numOcean += int(p.ocean);
               numLand += int(!p.water);
             }
-          q.ocean = (numOcean == q.corners.length);
+          q.ocean = (numOcean == q.touches.length);
           q.coast = (numOcean > 0) && (numLand > 0);
-          q.water = q.border || ((numLand != q.corners.length) && !q.coast);
+          q.water = q.border || ((numLand != q.touches.length) && !q.coast);
         }
     }
   
@@ -609,7 +609,7 @@ package {
       
       for each (q in corners) {
           r = q;
-          for each (s in q.neighbors) {
+          for each (s in q.adjacent) {
               if (s.elevation <= r.elevation) {
                 r = s;
               }
@@ -703,7 +703,7 @@ package {
       while (queue.length > 0) {
         q = queue.shift();
 
-        for each (r in q.neighbors) {
+        for each (r in q.adjacent) {
             var newMoisture:Number = q.moisture * 0.85;
             if (newMoisture > r.moisture) {
               r.moisture = newMoisture;

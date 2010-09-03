@@ -807,7 +807,7 @@ package {
         }
       
       for each (q in map.corners) {
-          for each (r in q.neighbors) {
+          for each (r in q.adjacent) {
               if (!q.ocean && !r.ocean && q.watershed != r.watershed && !q.coast && !r.coast) {
                 var edge:Edge = map.lookupEdgeFromCorner(q, r);
                 graphics.lineStyle(2.5, 0x000000, 0.05*Math.sqrt((q.watershed.watershed_size || 1) + (r.watershed.watershed_size || 1)));
