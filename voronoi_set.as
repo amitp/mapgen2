@@ -46,8 +46,9 @@ package {
     }
     
     // Random parameters governing the overall shape of the island
-    public function newIsland(type:String, seed:int):void {
+    public function newIsland(type:String, seed:int, variant:int):void {
       islandShape = IslandShape['make'+type](seed);
+      mapRandom.seed = variant;
     }
 
     

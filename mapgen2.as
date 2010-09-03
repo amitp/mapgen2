@@ -68,12 +68,11 @@ package {
     // type of island. The islandShape function uses both of them to
     // determine whether any point should be water or land.
     public var islandType:String = 'Perlin';
-    static public var islandSeedInitial:int = 85882;
+    static public var islandSeedInitial:String = "85882-1";
     
     // GUI for controlling the map generation and view
     public var controls:Sprite = new Sprite();
     public var islandSeedInput:TextField;
-    public var mapSeedOutput:TextField;
     public var statusBar:TextField;
 
     // This is the current map style. UI buttons change this, and it
@@ -122,12 +121,19 @@ package {
     
     // Random parameters governing the overall shape of the island
     public function newIsland(type:String):void {
+      var seed:int = 0, variant:int = 0;
       var t:Number = getTimer();
       
       if (islandSeedInput.text.length == 0) {
         islandSeedInput.text = (Math.random()*100000).toFixed(0);
       }
-      var seed:int = parseInt(islandSeedInput.text);
+      
+      var match:Object = /\s*(\d+)(?:\-(\d+))\s*$/.exec(islandSeedInput.text);
+      if (match != null) {
+        // It's of the format SHAPE-VARIANT
+        seed = parseInt(match[0]);
+        variant = parseInt(match[1] || "0");
+      }
       if (seed == 0) {
         // Convert the string into a number. This is a cheesy way to
         // do it but it doesn't matter. It just allows people to use
@@ -136,9 +142,10 @@ package {
           seed = (seed << 4) | islandSeedInput.text.charCodeAt(i);
         }
         seed %= 100000;
+        variant = 1+Math.floor(9*Math.random());
       }
       islandType = type;
-      map.newIsland(type, seed);
+      map.newIsland(type, seed, variant);
 
       Debug.trace("TIME for island", type, ":", getTimer()-t);
     }
@@ -166,7 +173,6 @@ package {
       
       commandExecute("Placing points...",
                      function():void {
-                       mapSeedOutput.text = map.mapRandom.seed.toString();
                        map.go(0, 1);
                        drawMap('polygons');
                      });
@@ -976,9 +982,9 @@ package {
       var y:int = 4;
       var islandShapeButton:TextField = makeButton("Island Shape:", 25, y, 150, null);
 
-      var seedLabel:TextField = makeButton("Shape #", 25, y+22, 50, null);
+      var seedLabel:TextField = makeButton("Shape #", 20, y+22, 50, null);
       
-      islandSeedInput = makeButton(islandSeedInitial.toString(), 75, y+22, 44, null);
+      islandSeedInput = makeButton(islandSeedInitial, 70, y+22, 54, null);
       islandSeedInput.background = true;
       islandSeedInput.backgroundColor = 0xccddcc;
       islandSeedInput.selectable = true;
@@ -1012,19 +1018,18 @@ package {
       controls.addChild(islandShapeButton);
       controls.addChild(seedLabel);
       controls.addChild(islandSeedInput);
-      controls.addChild(makeButton("Random", 121, y+22, 56,
+      controls.addChild(makeButton("Random", 125, y+22, 56,
                                    function (e:Event):void {
-                                     islandSeedInput.text = (Math.random()*100000).toFixed(0);
+                                     islandSeedInput.text =
+                                       ( (Math.random()*100000).toFixed(0)
+                                         + "-"
+                                         + (1 + Math.floor(9*Math.random())).toFixed(0) );
                                      go(islandType);
                                    }));
       controls.addChild(mapTypes.Radial);
       controls.addChild(mapTypes.Perlin);
       controls.addChild(mapTypes.Square);
       controls.addChild(mapTypes.Blob);
-      
-      controls.addChild(makeButton("Map #", 35, y+66, 40, null));
-      mapSeedOutput = makeButton("", 75, y+66, 75, null);
-      controls.addChild(mapSeedOutput);
     }
 
     
