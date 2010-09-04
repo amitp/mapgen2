@@ -65,7 +65,7 @@ package {
 
       // Roads go between polygons that have different contour levels
       for each (p in map.centers) {
-          for each (edge in p.edges) {
+          for each (edge in p.borders) {
               if (edge.v0 && edge.v1
                   && cornerContour[edge.v0.index] != cornerContour[edge.v1.index]) {
                 road[edge.index] = Math.min(cornerContour[edge.v0.index],

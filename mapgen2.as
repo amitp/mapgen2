@@ -479,7 +479,7 @@ package {
         graphicsData = new Vector.<IGraphicsData>();
         for each (p in map.centers) {
             if (p.ocean) continue;
-            for each (edge in p.edges) {
+            for each (edge in p.borders) {
                 var color:int = colors[p.biome] || 0;
                 if (colorFunction != null) {
                   color = colorFunction(color, p, q, edge);
@@ -671,7 +671,7 @@ package {
           if (roads.roadConnections[p.index]) {
             if (roads.roadConnections[p.index].length == 2) {
               // Regular road: draw a spline from one edge to the other.
-              edges = p.edges;
+              edges = p.borders;
               for (i = 0; i < edges.length; i++) {
                 edge1 = edges[i];
                 if (roads.road[edge1.index] > 0) {
@@ -702,7 +702,7 @@ package {
             } else {
               // Intersection or dead end: draw a road spline from
               // each edge to the center
-              for each (edge1 in p.edges) {
+              for each (edge1 in p.borders) {
                   if (roads.road[edge1.index] > 0) {
                     d = 0.25*edge1.midpoint.subtract(p.point).length;
                     A = normalTowards(edge1, p.point, d).add(edge1.midpoint);
@@ -781,7 +781,7 @@ package {
       for each (p in map.centers) {
           color = colors[p.biome] || (p.ocean? colors.OCEAN : p.water? colors.RIVER : 0xffffff);
           graphics.beginFill(interpolateColor(color, 0xdddddd, 0.2));
-          for each (edge in p.edges) {
+          for each (edge in p.borders) {
               if (edge.v0 && edge.v1) {
                 graphics.moveTo(p.point.x, p.point.y);
                 graphics.lineTo(edge.v0.point.x, edge.v0.point.y);

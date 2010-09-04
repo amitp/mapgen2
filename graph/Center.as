@@ -12,7 +12,7 @@ package graph {
     public var biome:String;
     public var elevation:Number;
     public var moisture:Number;
-    public var edges:Vector.<Edge>;
+    public var borders:Vector.<Edge>;
     public var neighbors:Vector.<Center>;
     public var corners:Vector.<Corner>;
   };

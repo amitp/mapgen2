@@ -71,7 +71,7 @@ package {
         for each (p in centers) {
             p.neighbors.splice(0, p.neighbors.length);
             p.corners.splice(0, p.corners.length);
-            p.edges.splice(0, p.edges.length);
+            p.borders.splice(0, p.borders.length);
           }
         centers.splice(0, centers.length);
       }
@@ -79,7 +79,7 @@ package {
         for each (q in corners) {
             q.adjacent.splice(0, q.adjacent.length);
             q.touches.splice(0, q.touches.length);
-            q.edges.splice(0, q.edges.length);
+            q.protrudes.splice(0, q.protrudes.length);
             q.downslope = null;
             q.watershed = null;
           }
@@ -269,8 +269,8 @@ package {
           p = new Center();
           p.index = centers.length;
           p.point = point;
-          p.edges = new Vector.<Edge>();
           p.neighbors = new  Vector.<Center>();
+          p.borders = new Vector.<Edge>();
           p.corners = new Vector.<Corner>();
           centers.push(p);
           centerLookup[point] = p;
@@ -308,9 +308,9 @@ package {
         q.index = corners.length;
         corners.push(q);
         q.point = point;
-        q.edges = new Vector.<Edge>();
-        q.adjacent = new Vector.<Corner>();
         q.touches = new Vector.<Center>();
+        q.protrudes = new Vector.<Edge>();
+        q.adjacent = new Vector.<Corner>();
         _cornerMap[bucket].push(q);
         return q;
       }
@@ -333,10 +333,10 @@ package {
           edge.d1 = centerLookup[dedge.p1];
 
           // Centers point to edges. Corners point to edges.
-          if (edge.d0 != null) { edge.d0.edges.push(edge); }
-          if (edge.d1 != null) { edge.d1.edges.push(edge); }
-          if (edge.v0 != null) { edge.v0.edges.push(edge); }
-          if (edge.v1 != null) { edge.v1.edges.push(edge); }
+          if (edge.d0 != null) { edge.d0.borders.push(edge); }
+          if (edge.d1 != null) { edge.d1.borders.push(edge); }
+          if (edge.v0 != null) { edge.v0.protrudes.push(edge); }
+          if (edge.v1 != null) { edge.v1.protrudes.push(edge); }
 
           function addToCornerList(v:Vector.<Corner>, x:Corner):void {
             if (x != null && v.indexOf(x) < 0) { v.push(x); }
@@ -758,14 +758,14 @@ package {
     // Look up a Voronoi Edge object given two adjacent Voronoi
     // polygons, or two adjacent Voronoi corners
     public function lookupEdgeFromCenter(p:Center, r:Center):Edge {
-      for each (var edge:Edge in p.edges) {
+      for each (var edge:Edge in p.borders) {
           if (edge.d0 == r || edge.d1 == r) return edge;
         }
       return null;
     }
 
     public function lookupEdgeFromCorner(q:Corner, s:Corner):Edge {
-      for each (var edge:Edge in q.edges) {
+      for each (var edge:Edge in q.protrudes) {
           if (edge.v0 == s || edge.v1 == s) return edge;
         }
       return null;

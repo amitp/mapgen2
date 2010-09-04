@@ -24,7 +24,7 @@ package {
     public function buildNoisyEdges(map:Map, lava:Lava, random:PM_PRNG):void {
       var p:Center, edge:Edge;
       for each (p in map.centers) {
-          for each (edge in p.edges) {
+          for each (edge in p.borders) {
               if (edge.d0 && edge.d1 && edge.v0 && edge.v1 && !path0[edge.index]) {
                 var f:Number = NOISY_LINE_TRADEOFF;
                 var t:Point = Point.interpolate(edge.v0.point, edge.d0.point, f);

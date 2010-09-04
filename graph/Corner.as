@@ -11,7 +11,7 @@ package graph {
     public var border:Boolean;
     public var elevation:Number;
     public var moisture:Number;
-    public var edges:Vector.<Edge>;
+    public var protrudes:Vector.<Edge>;
     public var adjacent:Vector.<Corner>;
     public var touches:Vector.<Center>;
   
