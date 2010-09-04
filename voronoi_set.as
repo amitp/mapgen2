@@ -14,8 +14,6 @@ package {
 
   public class voronoi_set {
     static public var NUM_POINTS:int = 2000;
-    static public var NOISY_LINE_TRADEOFF:Number = 0.5;  // low: jagged vedge; high: jagged dedge
-    static public var FRACTION_LAVA_FISSURES:Number = 0.2;  // 0 to 1, probability of fissure
     static public var LAKE_THRESHOLD:Number = 0.3;  // 0 to 1, fraction of water corners for water polygon
     static public var NUM_LLOYD_ITERATIONS:int = 2;
 
@@ -195,18 +193,9 @@ package {
       stages.push
         (["Decorate map...",
              function():void {
-               createLava();
                assignBiomes();
              }]);
       
-      // For all edges between polygons, build a noisy line path that
-      // we can reuse while drawing both polygons connected to that
-      // edge. The noisy lines are constructed in two sections, going
-      // from the vertex to the midpoint. We don't construct the noisy
-      // lines from the polygon centers to the midpoints, because
-      // they're not needed for polygon filling.
-      stages.push(["Add noise...", buildNoisyEdges]);
-
       for (var i:int = first; i < last; i++) {
           timeIt(stages[i][0], stages[i][1]);
         }
@@ -726,23 +715,6 @@ package {
     }
 
 
-    // Lava fissures are at high elevations where moisture is low
-    public function createLava():void {
-      var edge:Edge, p:Center, s:Center;
-      for each (p in centers) {
-          for each (s in p.neighbors) {
-              edge = lookupEdgeFromCenter(p, s);
-              if (!edge.river && !p.water && !s.water
-                  && p.elevation > 0.8 && s.elevation > 0.8
-                  && p.moisture < 0.3 && s.moisture < 0.3
-                  && mapRandom.nextDouble() < FRACTION_LAVA_FISSURES) {
-                edge.lava = true;
-              }
-            }
-        }
-    }
-
-    
     // Assign a biome type to each polygon. If it has
     // ocean/coast/water, then that's the biome; otherwise it depends
     // on low/high elevation and low/medium/high moisture. This is
@@ -782,75 +754,6 @@ package {
         }
     }
 
-
-    // Helper function: build a single noisy line in a quadrilateral A-B-C-D,
-    // and store the output points in a Vector.
-    static public function buildNoisyLineSegments(random:PM_PRNG, A:Point, B:Point, C:Point, D:Point, minLength:Number):Vector.<Point> {
-      var points:Vector.<Point> = new Vector.<Point>();
-
-      function subdivide(A:Point, B:Point, C:Point, D:Point):void {
-        if (A.subtract(C).length < minLength || B.subtract(D).length < minLength) {
-          return;
-        }
-
-        // Subdivide the quadrilateral
-        var p:Number = random.nextDoubleRange(0.2, 0.8);  // vertical (along A-D and B-C)
-        var q:Number = random.nextDoubleRange(0.2, 0.8);  // horizontal (along A-B and D-C)
-
-        // Midpoints
-        var E:Point = Point.interpolate(A, D, p);
-        var F:Point = Point.interpolate(B, C, p);
-        var G:Point = Point.interpolate(A, B, q);
-        var I:Point = Point.interpolate(D, C, q);
-        
-        // Central point
-        var H:Point = Point.interpolate(E, F, q);
-        
-        // Divide the quad into subquads, but meet at H
-        var s:Number = 1.0 - random.nextDoubleRange(-0.4, +0.4);
-        var t:Number = 1.0 - random.nextDoubleRange(-0.4, +0.4);
-
-        subdivide(A, Point.interpolate(G, B, s), H, Point.interpolate(E, D, t));
-        points.push(H);
-        subdivide(H, Point.interpolate(F, C, s), C, Point.interpolate(I, D, t));
-      }
-
-      points.push(A);
-      subdivide(A, B, C, D);
-      points.push(C);
-      return points;
-    }
-    
-    
-    // Build noisy line paths for each of the Voronoi edges. There are
-    // two noisy line paths for each edge, each covering half the
-    // distance: edge.path0 will be from v0 to the midpoint and
-    // edge.path1 will be from v1 to the midpoint. When drawing
-    // the polygons, one or the other must be drawn in reverse order.
-    public function buildNoisyEdges():void {
-      var p:Center, edge:Edge;
-      for each (p in centers) {
-          for each (edge in p.edges) {
-              if (edge.d0 && edge.d1 && edge.v0 && edge.v1 && !edge.path0) {
-                var f:Number = NOISY_LINE_TRADEOFF;
-                var t:Point = Point.interpolate(edge.v0.point, edge.d0.point, f);
-                var q:Point = Point.interpolate(edge.v0.point, edge.d1.point, f);
-                var r:Point = Point.interpolate(edge.v1.point, edge.d0.point, f);
-                var s:Point = Point.interpolate(edge.v1.point, edge.d1.point, f);
-
-                var minLength:int = 10;
-                if (edge.d0.biome != edge.d1.biome) minLength = 3;
-                if (edge.d0.ocean && edge.d1.ocean) minLength = 100;
-                if (edge.d0.coast || edge.d1.coast) minLength = 1;
-                if (edge.river || edge.lava) minLength = 1;
-                
-                edge.path0 = buildNoisyLineSegments(mapRandom, edge.v0.point, t, edge.midpoint, q, minLength);
-                edge.path1 = buildNoisyLineSegments(mapRandom, edge.v1.point, s, edge.midpoint, r, minLength);
-              }
-            }
-        }
-    }
-    
 
     // Look up a Voronoi Edge object given two adjacent Voronoi
     // polygons, or two adjacent Voronoi corners

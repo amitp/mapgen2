@@ -89,6 +89,8 @@ package {
     // The map data
     public var map:voronoi_set;
     public var roads:Roads;
+    public var lava:Lava;
+    public var noisyEdges:NoisyEdges;
 
 
     public function mapgen2() {
@@ -167,6 +169,8 @@ package {
       cancelCommands();
 
       roads = new Roads();
+      lava = new Lava();
+      noisyEdges = new NoisyEdges();
       
       commandExecute("Shaping map...",
                      function():void {
@@ -201,8 +205,9 @@ package {
 
       commandExecute("Edges...",
                      function():void {
-                       map.go(6, 7);
                        roads.createRoads(map);
+                       lava.createLava(map, map.mapRandom.nextDouble);
+                       noisyEdges.buildNoisyEdges(map, lava, map.mapRandom);
                        drawMap(mapMode);
                      });
     }
@@ -555,20 +560,23 @@ package {
               }
 
               function drawPath0():void {
+                var path:Vector.<Point> = noisyEdges.path0[edge.index];
                 graphics.moveTo(p.point.x, p.point.y);
-                graphics.lineTo(edge.path0[0].x, edge.path0[0].y);
-                drawPathForwards(graphics, edge.path0);
+                graphics.lineTo(path[0].x, path[0].y);
+                drawPathForwards(graphics, path);
                 graphics.lineTo(p.point.x, p.point.y);
               }
 
               function drawPath1():void {
+                var path:Vector.<Point> = noisyEdges.path1[edge.index];
                 graphics.moveTo(p.point.x, p.point.y);
-                graphics.lineTo(edge.path1[0].x, edge.path1[0].y);
-                drawPathForwards(graphics, edge.path1);
+                graphics.lineTo(path[0].x, path[0].y);
+                drawPathForwards(graphics, path);
                 graphics.lineTo(p.point.x, p.point.y);
               }
 
-              if (edge.path0 == null || edge.path1 == null) {
+              if (noisyEdges.path0[edge.index] == null
+                  || noisyEdges.path1[edge.index] == null) {
                 // It's at the edge of the map, where we don't have
                 // the noisy edges computed. TODO: figure out how to
                 // fill in these edges from the voronoi library.
@@ -716,10 +724,9 @@ package {
       for each (p in map.centers) {
           for each (r in p.neighbors) {
               edge = map.lookupEdgeFromCenter(p, r);
-              if (edge.path0 == null || edge.path1 == null) {
-                // It's at the edge of the map, where we don't have
-                // the noisy edges computed. TODO: fill these in with
-                // non-noisy lines.
+              if (noisyEdges.path0[edge.index] == null
+                  || noisyEdges.path1[edge.index] == null) {
+                // It's at the edge of the map
                 continue;
               }
               if (p.ocean != r.ocean) {
@@ -731,20 +738,21 @@ package {
               } else if (p.water || r.water) {
                 // Lake interior – we don't want to draw the rivers here
                 continue;
-              } else if (edge.river != 0.0) {
-                // River edge
-                graphics.lineStyle(Math.sqrt(edge.river), colors.RIVER);
-              } else if (edge.lava) {
+              } else if (lava.lava[edge.index]) {
                 // Lava flow
                 graphics.lineStyle(1, colors.LAVA);
+              } else if (edge.river > 0.0) {
+                // River edge
+                graphics.lineStyle(Math.sqrt(edge.river), colors.RIVER);
               } else {
                 // No edge
                 continue;
               }
               
-              graphics.moveTo(edge.path0[0].x, edge.path0[0].y);
-              drawPathForwards(graphics, edge.path0);
-              drawPathBackwards(graphics, edge.path1);
+              graphics.moveTo(noisyEdges.path0[edge.index][0].x,
+                              noisyEdges.path0[edge.index][0].y);
+              drawPathForwards(graphics, noisyEdges.path0[edge.index]);
+              drawPathBackwards(graphics, noisyEdges.path1[edge.index]);
               graphics.lineStyle();
             }
         }
