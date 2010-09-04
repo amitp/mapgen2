@@ -35,15 +35,13 @@ History:
 
 *   Since my initial approach failed, I wrote several small prototypes to figure out how to make rivers, coastlines, and mountains. These are the key features I want to support. I will then figure out how to combine them into a map.
 
-*   The voronoi_set.as prototype worked well and I continued adding to it (instead of converting to C++). It supports terrain types: ocean, land, beach, lake, forest, swamp, desert, ice, rocky, grassland, savannah. It has rivers and roads. I am undecided about converting to C++. It would be useful but it's a lot of work.
+*   The voronoi_set.as prototype worked well and I continued adding to it (instead of converting to C++). It supports terrain types: ocean, land, beach, lake, forest, swamp, desert, ice, rocky, grassland, savannah. It has rivers and roads. I decided not to convert it to C++ for now. Instead, I've refactored it into the core map generation (Map.as), display and GUI (mapgen2.as), graph representation (graph/*.as), decorative elements (Roads.as, Lava.as), and noisy edge generation (NoisyEdges.as).
 
-** Notes
 
-* http://en.wikipedia.org/wiki/Drainage_basin — watersheds are
-    sometimes computed using voronoi; watersheds form boundaries
-    between regions
+** Requirements:
 
-* Compiling prototypes/voronoi_set.as requires my fork of as3delaunay:
-    http://github.com/amitp/as3delaunay as well as
-    de.polygonal.math.PM_PRNG.as
+* [My fork of as3delaunay](http://github.com/amitp/as3delaunay)
+* de.polygonal.math.PM_PRNG.as
+* My Debug.as (remove the lines that call Debug.trace and you'll be fine)
+
 
