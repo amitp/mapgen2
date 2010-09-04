@@ -456,6 +456,9 @@ package {
       if (mode != 'polygons') {
         renderEdges(graphics, displayColors);
       }
+      if (mode != 'slopes' && mode != 'moisture') {
+        renderBridges(graphics, displayColors);
+      }
     }
 
 
