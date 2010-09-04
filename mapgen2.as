@@ -18,7 +18,6 @@ package {
   [SWF(width="800", height="600", frameRate=60)]
   public class mapgen2 extends Sprite {
     static public var SIZE:int = 600;
-    static public var NOISY_LINE_TRADEOFF:Number = 0.5;  // low: jagged vedge; high: jagged dedge
     
     static public var displayColors:Object = {
       // Features
@@ -89,6 +88,7 @@ package {
     
     // The map data
     public var map:voronoi_set;
+    public var roads:Roads;
 
 
     public function mapgen2() {
@@ -166,6 +166,8 @@ package {
     public function go(type:String):void {
       cancelCommands();
 
+      roads = new Roads();
+      
       commandExecute("Shaping map...",
                      function():void {
                        newIsland(type);
@@ -200,6 +202,7 @@ package {
       commandExecute("Edges...",
                      function():void {
                        map.go(6, 7);
+                       roads.createRoads(map);
                        drawMap(mapMode);
                      });
     }
@@ -621,7 +624,7 @@ package {
               && !edge.d0.water && !edge.d1.water
               && (edge.d0.elevation > 0.05 || edge.d1.elevation > 0.05)) {
             var n:Point = new Point(-(edge.v1.point.y - edge.v0.point.y), edge.v1.point.x - edge.v0.point.x);
-            n.normalize(0.25 + ((edge.road > 0)? 0.5 : 0) + 0.75*Math.sqrt(edge.river));
+            n.normalize(0.25 + (roads.road[edge.index]? 0.5 : 0) + 0.75*Math.sqrt(edge.river));
             graphics.lineStyle(1.1, colors.BRIDGE, 1.0, false, LineScaleMode.NORMAL, CapsStyle.SQUARE);
             graphics.moveTo(edge.midpoint.x - n.x, edge.midpoint.y - n.y);
             graphics.lineTo(edge.midpoint.x + n.x, edge.midpoint.y + n.y);
@@ -654,49 +657,51 @@ package {
       }
       
       for each (p in map.centers) {
-          if (p.road_connections == 2) {
-            // Regular road: draw a spline from one edge to the other.
-            edges = p.edges;
-            for (i = 0; i < edges.length; i++) {
-              edge1 = edges[i];
-              if (edge1.road > 0) {
-                for (j = i+1; j < edges.length; j++) {
-                  edge2 = edges[j];
-                  if (edge2.road > 0) {
-                    // The spline connects the midpoints of the edges
-                    // and at right angles to them. In between we
-                    // generate two control points A and B and one
-                    // additional vertex C.  This usually works but
-                    // not always.
-                    d = 0.5*Math.min
-                      (edge1.midpoint.subtract(p.point).length,
-                       edge2.midpoint.subtract(p.point).length);
-                    A = normalTowards(edge1, p.point, d).add(edge1.midpoint);
-                    B = normalTowards(edge2, p.point, d).add(edge2.midpoint);
-                    C = Point.interpolate(A, B, 0.5);
-                    graphics.lineStyle(1.1, colors['ROAD'+edge1.road]);
-                    graphics.moveTo(edge1.midpoint.x, edge1.midpoint.y);
-                    graphics.curveTo(A.x, A.y, C.x, C.y);
-                    graphics.lineStyle(1.1, colors['ROAD'+edge2.road]);
-                    graphics.curveTo(B.x, B.y, edge2.midpoint.x, edge2.midpoint.y);
-                    graphics.lineStyle();
+          if (roads.roadConnections[p.index]) {
+            if (roads.roadConnections[p.index].length == 2) {
+              // Regular road: draw a spline from one edge to the other.
+              edges = p.edges;
+              for (i = 0; i < edges.length; i++) {
+                edge1 = edges[i];
+                if (roads.road[edge1.index] > 0) {
+                  for (j = i+1; j < edges.length; j++) {
+                    edge2 = edges[j];
+                    if (roads.road[edge2.index] > 0) {
+                      // The spline connects the midpoints of the edges
+                      // and at right angles to them. In between we
+                      // generate two control points A and B and one
+                      // additional vertex C.  This usually works but
+                      // not always.
+                      d = 0.5*Math.min
+                        (edge1.midpoint.subtract(p.point).length,
+                         edge2.midpoint.subtract(p.point).length);
+                      A = normalTowards(edge1, p.point, d).add(edge1.midpoint);
+                      B = normalTowards(edge2, p.point, d).add(edge2.midpoint);
+                      C = Point.interpolate(A, B, 0.5);
+                      graphics.lineStyle(1.1, colors['ROAD'+roads.road[edge1.index]]);
+                      graphics.moveTo(edge1.midpoint.x, edge1.midpoint.y);
+                      graphics.curveTo(A.x, A.y, C.x, C.y);
+                      graphics.lineStyle(1.1, colors['ROAD'+roads.road[edge2.index]]);
+                      graphics.curveTo(B.x, B.y, edge2.midpoint.x, edge2.midpoint.y);
+                      graphics.lineStyle();
+                    }
                   }
                 }
               }
-            }
-          }
-          if (p.road_connections && p.road_connections != 2) {
-            // Intersection: draw a road spline from each edge to the center
-            for each (edge1 in p.edges) {
-                if (edge1.road > 0) {
-                  d = 0.25*edge1.midpoint.subtract(p.point).length;
-                  A = normalTowards(edge1, p.point, d).add(edge1.midpoint);
-                  graphics.lineStyle(1.4, colors['ROAD'+edge1.road]);
-                  graphics.moveTo(edge1.midpoint.x, edge1.midpoint.y);
-                  graphics.curveTo(A.x, A.y, p.point.x, p.point.y);
-                  graphics.lineStyle();
+            } else {
+              // Intersection or dead end: draw a road spline from
+              // each edge to the center
+              for each (edge1 in p.edges) {
+                  if (roads.road[edge1.index] > 0) {
+                    d = 0.25*edge1.midpoint.subtract(p.point).length;
+                    A = normalTowards(edge1, p.point, d).add(edge1.midpoint);
+                    graphics.lineStyle(1.4, colors['ROAD'+roads.road[edge1.index]]);
+                    graphics.moveTo(edge1.midpoint.x, edge1.midpoint.y);
+                    graphics.curveTo(A.x, A.y, p.point.x, p.point.y);
+                    graphics.lineStyle();
+                  }
                 }
-              }
+            }
           }
         }
     }
@@ -936,7 +941,7 @@ package {
                                     Math.floor(p.point.y * 2048/SIZE));
               exportBitmap.setPixel(r.x, r.y,
                                     exportBitmap.getPixel(r.x, r.y)
-                                    | (p.road_connections?
+                                    | (roads.roadConnections[p]?
                                        exportOverrideColors.POLYGON_CENTER_SAFE
                                        : exportOverrideColors.POLYGON_CENTER));
             }

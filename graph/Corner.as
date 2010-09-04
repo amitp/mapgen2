@@ -14,7 +14,6 @@ package graph {
     public var edges:Vector.<Edge>;
     public var adjacent:Vector.<Corner>;
     public var touches:Vector.<Center>;
-    public var contour:int;
   
     public var river:int;
     public var downslope:Corner;

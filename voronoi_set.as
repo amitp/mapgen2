@@ -197,7 +197,6 @@ package {
              function():void {
                createLava();
                assignBiomes();
-               createRoads();
              }]);
       
       // For all edges between polygons, build a noisy line path that
@@ -743,60 +742,6 @@ package {
         }
     }
 
-    
-    // We want to mark different elevation zones so that we can draw
-    // island-circling roads that divide the areas.
-    public function createRoads():void {
-      // Oceans and coastal polygons are the lowest contour zone
-      // (1). Anything connected to contour level K, if it's below
-      // elevation threshold K, or if it's water, gets contour level
-      // K.  (2) Anything not assigned a contour level, and connected
-      // to contour level K, gets contour level K+1.
-      var queue:Array = [];
-      var p:Center, q:Corner, r:Center, edge:Edge, newLevel:int;
-      var elevationThresholds:Array = [0, 0.05, 0.37, 0.64, 1.0];
-
-      for each (p in centers) {
-          if (p.coast || p.ocean) {
-            p.contour = 1;
-            queue.push(p);
-          }
-        }
-      while (queue.length > 0) {
-        p = queue.shift();
-        for each (r in p.neighbors) {
-            newLevel = p.contour || 0;
-            while (r.elevation > elevationThresholds[newLevel] && !r.water) {
-              // NOTE: extend the contour line past bodies of
-              // water so that roads don't terminate inside lakes.
-              newLevel += 1;
-            }
-            if (newLevel < (r.contour || 999)) {
-              r.contour = newLevel;
-              queue.push(r);
-            }
-          }
-      }
-
-      // A corner's contour level is the MIN of its polygons
-      for each (p in centers) {
-          for each (q in p.corners) {
-              q.contour = Math.min(q.contour || 999, p.contour || 999);
-            }
-        }
-
-      // Roads go between polygons that have different contour levels
-      for each (p in centers) {
-          for each (edge in p.edges) {
-              if (edge.v0 && edge.v1
-                  && edge.v0.contour != edge.v1.contour) {
-                edge.road = Math.min(edge.v0.contour, edge.v1.contour);
-                p.road_connections = (p.road_connections || 0) + 1;
-              }
-            }
-        }
-    }
-      
     
     // Assign a biome type to each polygon. If it has
     // ocean/coast/water, then that's the biome; otherwise it depends

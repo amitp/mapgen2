@@ -15,8 +15,5 @@ package graph {
     public var edges:Vector.<Edge>;
     public var neighbors:Vector.<Center>;
     public var corners:Vector.<Corner>;
-    public var contour:int;
-  
-    public var road_connections:int;  // should be Vector.<Corner>
   };
 }
