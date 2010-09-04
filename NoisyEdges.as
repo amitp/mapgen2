@@ -21,7 +21,7 @@ package {
     // distance: path0 is from v0 to the midpoint and path1 is from v1
     // to the midpoint. When drawing the polygons, one or the other
     // must be drawn in reverse order.
-    public function buildNoisyEdges(map:voronoi_set, lava:Lava, random:PM_PRNG):void {
+    public function buildNoisyEdges(map:Map, lava:Lava, random:PM_PRNG):void {
       var p:Center, edge:Edge;
       for each (p in map.centers) {
           for each (edge in p.edges) {

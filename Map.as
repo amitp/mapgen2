@@ -12,7 +12,7 @@ package {
   import com.nodename.Delaunay.Voronoi;
   import de.polygonal.math.PM_PRNG;
 
-  public class voronoi_set {
+  public class Map {
     static public var NUM_POINTS:int = 2000;
     static public var LAKE_THRESHOLD:Number = 0.3;  // 0 to 1, fraction of water corners for water polygon
     static public var NUM_LLOYD_ITERATIONS:int = 2;
@@ -38,7 +38,7 @@ package {
     public var corners:Vector.<Corner>;
     public var edges:Vector.<Edge>;
 
-    public function voronoi_set(size:Number) {
+    public function Map(size:Number) {
       SIZE = size;
       reset();
     }

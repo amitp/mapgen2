@@ -1,4 +1,4 @@
-// Display the voronoi graph produced in voronoi_set.as
+// Display the voronoi graph produced in Map.as
 // Author: amitp@cs.stanford.edu
 // License: MIT
 
@@ -87,7 +87,7 @@ package {
     private var graphicsData:Vector.<IGraphicsData>;
     
     // The map data
-    public var map:voronoi_set;
+    public var map:Map;
     public var roads:Roads;
     public var lava:Lava;
     public var noisyEdges:NoisyEdges;
@@ -111,7 +111,7 @@ package {
       addGenerateButtons();
       addMiscLabels();
 
-      map = new voronoi_set(SIZE);
+      map = new Map(SIZE);
       go(islandType);
       
       render3dTimer.addEventListener(TimerEvent.TIMER, function (e:TimerEvent):void {

@@ -12,7 +12,7 @@ package {
     public var lava:Array = [];  // edge index -> Boolean
 
     // Lava fissures are at high elevations where moisture is low
-    public function createLava(map:voronoi_set, randomDouble:Function):void {
+    public function createLava(map:Map, randomDouble:Function):void {
       var edge:Edge;
       for each (edge in map.edges) {
           if (!edge.river && !edge.d0.water && !edge.d1.water

@@ -20,7 +20,7 @@ package {
 
     // We want to mark different elevation zones so that we can draw
     // island-circling roads that divide the areas.
-    public function createRoads(map:voronoi_set):void {
+    public function createRoads(map:Map):void {
       // Oceans and coastal polygons are the lowest contour zone
       // (1). Anything connected to contour level K, if it's below
       // elevation threshold K, or if it's water, gets contour level
