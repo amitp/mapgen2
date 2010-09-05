@@ -788,7 +788,7 @@ package {
                 if (edge.river) {
                   graphics.lineStyle(2, displayColors.RIVER, 1.0);
                 } else {
-                  graphics.lineStyle(1, 0x000000, 0.4);
+                  graphics.lineStyle(0, 0x000000, 0.4);
                 }
                 graphics.lineTo(edge.v1.point.x, edge.v1.point.y);
                 graphics.lineStyle();
