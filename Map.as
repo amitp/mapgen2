@@ -153,7 +153,7 @@ package {
                // largest ring around the island, and therefore should more
                // land area than the highest elevation, which is the very
                // center of a perfectly circular island.
-               var landPoints:Vector.<Corner> = new Vector.<Corner>();  // only non-ocean
+               var landPoints:Array = [];  // non-ocean
                for each (var q:Corner in corners) {
                    if (q.ocean || q.coast) {
                      q.elevation = 0.0;
@@ -161,10 +161,8 @@ package {
                      landPoints.push(q);
                    }
                  }
-               for (var i:int = 0; i < 10; i++) {
-                 redistributeElevations(landPoints);
-               }
-      
+               redistributeElevations(landPoints);
+               
                // Polygon elevations are the average of their corners
                assignPolygonElevations();
           }]);
@@ -434,77 +432,31 @@ package {
     
     // Change the overall distribution of elevations so that lower
     // elevations are more common than higher
-    // elevations. Specifically, we want elevation X to have
-    // frequency (K+maxElevation-X), for some value of K.  To do
-    // this we will compute a histogram of the elevations, then
-    // compute the cumulative sum, then try to make that match the
-    // desired cumulative sum. The desired cumulative sum is the
-    // integral of the desired frequency distribution.
-    public function redistributeElevations(points:Vector.<Corner>):void {
-      var maxElevation:int = 20;
-      var M:Number = 1+maxElevation;
-      var q:Corner, i:int, x:Number, x0:Number, x1:Number, f:Number, y0:Number, y1:Number;
-      var histogram:Array = [];
+    // elevations. Specifically, we want elevation X to have frequency
+    // (1-X).  To do this we will sort the corners, then set each
+    // corner to its desired elevation.
+    public function redistributeElevations(locations:Array):void {
+      // SCALE_FACTOR increases the mountain area. At 1.0 the maximum
+      // elevation barely shows up on the map, so we set it to 1.1.
+      var SCALE_FACTOR:Number = 1.1;
+      var i:int, y:Number, x:Number;
 
-      // First, rescale the points so that none is greater than maxElevation
-      x = 1.0;
-      for each (q in points) {
-          if (q.elevation > x) {
-            x = q.elevation;
-          }
-        }
-      // As we rescale, build a histogram of the resulting elevations
-      for each (q in points) {
-          q.elevation *= maxElevation / x;
-          i = int(Math.floor(q.elevation));
-          histogram[i] = (histogram[i] || 0) + 1;
-        }
-
-      // Build a cumulative sum of the histogram. We want this to
-      // match a target distribution, and will adjust all the
-      // elevations to get closer to that.
-      var cumulative:Array = [];
-      cumulative[0] = 0.0;
-      for (i = 0; i < maxElevation; i++) {
-        cumulative[i+1] = (cumulative[i] || 0) + (histogram[i] || 0);
+      locations.sortOn('elevation', Array.NUMERIC);
+      for (i = 0; i < locations.length; i++) {
+        // Let y(x) be the total area that we want at elevation <= x.
+        // We want the higher elevations to occur less than lower
+        // ones, and set the area to be y(x) = 1 - (1-x)^2.
+        y = i/(locations.length-1);
+        // Now we have to solve for x, given the known y.
+        //  *  y = 1 - (1-x)^2
+        //  *  y = 1 - (1 - 2x + x^2)
+        //  *  y = 2x - x^2
+        //  *  x^2 - 2x + y = 0
+        // From this we can use the quadratic equation to get:
+        x = Math.sqrt(SCALE_FACTOR) - Math.sqrt(SCALE_FACTOR*(1-y));
+        if (x > 1.0) x = 1.0;  // TODO: does this break downslopes?
+        locations[i]['elevation'] = x;
       }
-
-      // Remap each point's elevation (x) to be closer to the target
-      // distribution. We have an actual cumulative distribution y(x)
-      // and a desired cumulative distribution y'(x).  Given x, we
-      // compute y(x), then set y(x) = y'(x), then solve for x in the
-      // y'(x)=... equation. That gives us the corresponding elevation
-      // in the target distribution.
-      function remap(x:Number):Number {
-          // We don't have the actual cumulative distribution computed
-          // for all points. x falls into a histogram bucket from x0
-          // to x1, and we can interpolate.
-          x0 = Math.floor(x);
-          if (x0 >= maxElevation) x0 = maxElevation-1.0;
-          x1 = x0 + 1.0;
-          f = x - x0;  /* fractional part */
-          // We'll map x0 and x1 into the actual cumulative sum, y0 and y1
-          y0 = cumulative[int(x0)];
-          y1 = cumulative[int(x1)];
-
-          // We need to map these cumulative y's back to a desired
-          // x. The desired histogram at x is (M-x). The
-          // integral of this is (-0.5*x^2 + M*x). To
-          // solve for x, we need to use the quadratic formula.
-          x0 = M * (1 - Math.sqrt(1 - y0/points.length));
-          x1 = M * (1 - Math.sqrt(1 - y1/points.length));
-          // Since we only have mapped the values at the histogram
-          // boundaries, we need to interpolate to get the value for
-          // this point.
-          x = (1-f)*x0 + f*x1;
-
-          if (x > maxElevation) x = maxElevation;
-          return x/maxElevation;
-      }
-      
-      for each (q in points) {
-          q.elevation = remap(q.elevation);
-        }
     }
 
 
