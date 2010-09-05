@@ -153,15 +153,14 @@ package {
                // largest ring around the island, and therefore should more
                // land area than the highest elevation, which is the very
                // center of a perfectly circular island.
-               var landPoints:Array = [];  // non-ocean
+               redistributeElevations(landCorners(corners));
+
+               // Assign elevations to non-land corners
                for each (var q:Corner in corners) {
                    if (q.ocean || q.coast) {
                      q.elevation = 0.0;
-                   } else {
-                     landPoints.push(q);
                    }
                  }
-               redistributeElevations(landPoints);
                
                // Polygon elevations are the average of their corners
                assignPolygonElevations();
@@ -174,18 +173,21 @@ package {
                // Determine downslope paths.
                calculateDownslopes();
 
-
                // Determine watersheds: for every corner, where does it flow
                // out into the ocean? 
                calculateWatersheds();
 
-      
                // Create rivers.
                createRivers();
 
-      
-               // Calculate moisture, starting at rivers and lakes, but not oceans.
-               calculateMoisture();
+               // Determine moisture at corners, starting at rivers
+               // and lakes, but not oceans. Then redistribute
+               // moisture to cover the entire range evenly from 0.0
+               // to 1.0. Then assign polygon moisture as the average
+               // of the corner moisture.
+               assignCornerMoisture();
+               redistributeMoisture(landCorners(corners));
+               assignPolygonMoisture();
              }]);
 
       stages.push
@@ -247,6 +249,21 @@ package {
       }
     }
     
+
+    // Create an array of corners that are on land only, for use by
+    // algorithms that work only on land.  We return an array instead
+    // of a vector because the redistribution algorithms want to sort
+    // this array using Array.sortOn.
+    public function landCorners(corners:Vector.<Corner>):Array {
+      var q:Corner, locations:Array = [];
+      for each (q in corners) {
+          if (!q.ocean && !q.coast) {
+            locations.push(q);
+          }
+        }
+      return locations;
+    }
+
     
     // Build graph data structure in 'edges', 'centers', 'corners',
     // based on information in the Voronoi results: point.neighbors
@@ -455,7 +472,17 @@ package {
         // From this we can use the quadratic equation to get:
         x = Math.sqrt(SCALE_FACTOR) - Math.sqrt(SCALE_FACTOR*(1-y));
         if (x > 1.0) x = 1.0;  // TODO: does this break downslopes?
-        locations[i]['elevation'] = x;
+        locations[i].elevation = x;
+      }
+    }
+
+
+    // Change the overall distribution of moisture to be evenly distributed.
+    public function redistributeMoisture(locations:Array):void {
+      var i:int;
+      locations.sortOn('moisture', Array.NUMERIC);
+      for (i = 0; i < locations.length; i++) {
+        locations[i].moisture = i/(locations.length-1);
       }
     }
 
@@ -624,17 +651,14 @@ package {
 
     // Calculate moisture. Freshwater sources spread moisture: rivers
     // and lakes (not oceans). Saltwater sources have moisture but do
-    // not spread it (we set it at the end, after propagation). TODO:
-    // the parameters (1.5, 0.2, 0.9) are tuned for NUM_POINTS = 2000,
-    // and it's not clear how they should be adjusted for other
-    // scales. Redistributing moisture might be the simplest solution.
-    public function calculateMoisture():void {
-      var p:Center, q:Corner, r:Corner, sumMoisture:Number;
+    // not spread it (we set it at the end, after propagation).
+    public function assignCornerMoisture():void {
+      var q:Corner, r:Corner, newMoisture:Number;
       var queue:Array = [];
       // Fresh water
       for each (q in corners) {
           if ((q.water || q.river) && !q.ocean) {
-            q.moisture = q.river? Math.min(1.8, (0.2 * q.river)) : 1.0;
+            q.moisture = q.river? Math.min(3.0, (0.2 * q.river)) : 1.0;
             queue.push(q);
           } else {
             q.moisture = 0.0;
@@ -644,7 +668,7 @@ package {
         q = queue.shift();
 
         for each (r in q.adjacent) {
-            var newMoisture:Number = q.moisture * 0.85;
+            newMoisture = q.moisture * 0.9;
             if (newMoisture > r.moisture) {
               r.moisture = newMoisture;
               queue.push(r);
@@ -653,9 +677,16 @@ package {
       }
       // Salt water
       for each (q in corners) {
-          if (q.ocean || q.coast) q.moisture = 1.0;
+          if (q.ocean || q.coast) {
+            q.moisture = 1.0;
+          }
         }
-      // Polygon moisture is the average of the moisture at corners
+    }
+
+
+    // Polygon moisture is the average of the moisture at corners
+    public function assignPolygonMoisture():void {
+      var p:Center, q:Corner, sumMoisture:Number;
       for each (p in centers) {
           sumMoisture = 0.0;
           for each (q in p.corners) {
@@ -694,13 +725,13 @@ package {
             else p.biome = 'TEMPERATE_DESERT';
           } else if (p.elevation > 0.3) {
             if (p.moisture > 0.8) p.biome = 'TEMPERATE_RAIN_FOREST';
-            else if (p.moisture > 0.6) p.biome = 'TEMPERATE_DECIDUOUS_FOREST';
-            else if (p.moisture > 0.3) p.biome = 'GRASSLAND';
+            else if (p.moisture > 0.5) p.biome = 'TEMPERATE_DECIDUOUS_FOREST';
+            else if (p.moisture > 0.1) p.biome = 'GRASSLAND';
             else p.biome = 'TEMPERATE_DESERT';
           } else {
-            if (p.moisture > 0.8) p.biome = 'TROPICAL_RAIN_FOREST';
-            else if (p.moisture > 0.5) p.biome = 'TROPICAL_SEASONAL_FOREST';
-            else if (p.moisture > 0.3) p.biome = 'GRASSLAND';
+            if (p.moisture > 0.6) p.biome = 'TROPICAL_RAIN_FOREST';
+            else if (p.moisture > 0.3) p.biome = 'TROPICAL_SEASONAL_FOREST';
+            else if (p.moisture > 0.1) p.biome = 'GRASSLAND';
             else p.biome = 'SUBTROPICAL_DESERT';
           }
         }
