@@ -21,8 +21,8 @@ package {
     
     static public var displayColors:Object = {
       // Features
-      OCEAN: 0x555599,
-      COAST: 0x444477,
+      OCEAN: 0x44447a,
+      COAST: 0x33335a,
       LAKESHORE: 0x225588,
       LAKE: 0x336699,
       RIVER: 0x225588,
