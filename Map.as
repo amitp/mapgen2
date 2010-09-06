@@ -53,9 +53,6 @@ package {
     public function reset():void {
       var p:Center, q:Corner, edge:Edge;
 
-      // Clear debugging area, if debug log is enabled
-      Debug.clear();
-      
       // Break cycles so the garbage collector will release data.
       if (points) {
         points.splice(0, points.length);

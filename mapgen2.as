@@ -166,6 +166,7 @@ package {
 
     
     public function go(type:String):void {
+      Debug.clear();
       cancelCommands();
 
       roads = new Roads();
