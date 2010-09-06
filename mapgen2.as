@@ -133,8 +133,8 @@ package {
       var match:Object = /\s*(\d+)(?:\-(\d+))\s*$/.exec(islandSeedInput.text);
       if (match != null) {
         // It's of the format SHAPE-VARIANT
-        seed = parseInt(match[0]);
-        variant = parseInt(match[1] || "0");
+        seed = parseInt(match[1]);
+        variant = parseInt(match[2] || "0");
       }
       if (seed == 0) {
         // Convert the string into a number. This is a cheesy way to
@@ -149,7 +149,7 @@ package {
       islandType = type;
       map.newIsland(type, seed, variant);
 
-      Debug.trace("TIME for island", type, ":", getTimer()-t);
+      Debug.trace("TIME for island", type, seed, variant, ":", getTimer()-t);
     }
 
     
