@@ -744,7 +744,7 @@ package {
               } else if (lava.lava[edge.index]) {
                 // Lava flow
                 graphics.lineStyle(1, colors.LAVA);
-              } else if (edge.river > 0.0) {
+              } else if (edge.river > 0) {
                 // River edge
                 graphics.lineStyle(Math.sqrt(edge.river), colors.RIVER);
               } else {
@@ -785,7 +785,7 @@ package {
               if (edge.v0 && edge.v1) {
                 graphics.moveTo(p.point.x, p.point.y);
                 graphics.lineTo(edge.v0.point.x, edge.v0.point.y);
-                if (edge.river) {
+                if (edge.river > 0) {
                   graphics.lineStyle(2, displayColors.RIVER, 1.0);
                 } else {
                   graphics.lineStyle(0, 0x000000, 0.4);

@@ -641,9 +641,9 @@ package {
             break;
           }
           edge = lookupEdgeFromCorner(q, q.downslope);
-          edge.river = (edge.river || 0) + 1;
+          edge.river = edge.river + 1;
           q.river = (q.river || 0) + 1;
-          q.downslope.river = (q.downslope.river || 0) + 1;
+          q.downslope.river = (q.downslope.river || 0) + 1;  // TODO: fix double count
           q = q.downslope;
         }
       }
@@ -658,8 +658,8 @@ package {
       var queue:Array = [];
       // Fresh water
       for each (q in corners) {
-          if ((q.water || q.river) && !q.ocean) {
-            q.moisture = q.river? Math.min(3.0, (0.2 * q.river)) : 1.0;
+          if ((q.water || q.river > 0) && !q.ocean) {
+            q.moisture = q.river > 0? Math.min(3.0, (0.2 * q.river)) : 1.0;
             queue.push(q);
           } else {
             q.moisture = 0.0;
