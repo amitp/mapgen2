@@ -105,7 +105,7 @@ package {
 
       controls.x = SIZE;
       addChild(controls);
-      
+
       addExportButtons();
       addViewButtons();
       addGenerateButtons();
@@ -156,7 +156,7 @@ package {
     public function graphicsReset():void {
       triangles3d = [];
       graphics.clear();
-      graphics.beginFill(0x555599);
+      graphics.beginFill(displayColors.OCEAN);
       graphics.drawRect(0, 0, SIZE, 2000);
       graphics.endFill();
       graphics.beginFill(0xbbbbaa);
