@@ -972,6 +972,102 @@ package {
     }
 
 
+    // Export the graph data as XML (slow)
+    public function exportPolygons():XML {
+      var p:Center, q:Corner, r:Center, s:Corner, edge:Edge;
+      var top:XML =
+        <map
+          shape={islandSeedInput.text}
+          type={islandType}
+          size={Map.NUM_POINTS}>
+          <generator
+             url="http://www-cs-students.stanford.edu/~amitp/game-programming/polygon-map-generation/"
+             timestamp={new Date().toUTCString()} />
+        </map>;
+      var dnodes:XML = <centers/>;
+      var edges:XML = <edges/>;
+      var vnodes:XML = <corners/>;
+      var borders:XML, neighbors:XML, corners:XML;
+      var touches:XML, protrudes:XML, adjacent:XML;
+      var edgeNode:XML;
+
+      for each (p in map.centers) {
+          borders = <borders/>;
+          neighbors = <neighbors/>;
+          corners = <corners/>;
+
+          for each (r in p.neighbors) {
+              neighbors.appendChild(<center id={r.index}/>);
+            }
+          for each (edge in p.borders) {
+              borders.appendChild(<edge id={edge.index}/>);
+            }
+          for each (q in p.corners) {
+              corners.appendChild(<corner id={q.index}/>);
+            }
+          
+          dnodes.appendChild
+            (<center id={p.index}
+                     x={p.point.x} y={p.point.y}
+                     water={p.water} ocean={p.ocean}
+                     coast={p.coast} border={p.border}
+                     biome={p.biome}
+                     elevation={p.elevation} moisture={p.moisture}>
+               {neighbors}
+               {borders}
+               {corners}
+             </center>);
+        }
+
+      for each (edge in map.edges) {
+          edgeNode =
+            <edge id={edge.index} river={edge.river}/>;
+          if (edge.midpoint != null) {
+            edgeNode.@x = edge.midpoint.x;
+            edgeNode.@y = edge.midpoint.y;
+          }
+          if (edge.d0 != null) edgeNode.@center0 = edge.d0.index;
+          if (edge.d1 != null) edgeNode.@center1 = edge.d1.index;
+          if (edge.v0 != null) edgeNode.@corner0 = edge.v0.index;
+          if (edge.v1 != null) edgeNode.@corner1 = edge.v1.index;
+          edges.appendChild(edgeNode);
+        }
+      
+      for each (q in map.corners) {
+          touches = <touches/>;
+          protrudes = <protrudes/>;
+          adjacent = <adjacent/>;
+
+          for each (p in q.touches) {
+              touches.appendChild(<center id={p.index}/>);
+            }
+          for each (edge in q.protrudes) {
+              protrudes.appendChild(<edge id={edge.index}/>);
+            }
+          for each (s in q.adjacent) {
+              corners.appendChild(<corner id={s.index}/>);
+            }
+          
+          vnodes.appendChild
+            (<corner id={q.index}
+                     x={q.point.x} y={q.point.y}
+                     water={p.water} ocean={p.ocean}
+                     coast={p.coast} border={p.border}
+                     elevation={p.elevation} moisture={p.moisture}
+                     river={q.river} downslope={q.downslope?q.downslope.index:-1}>
+               {touches}
+               {protrudes}
+               {adjacent}
+             </corner>);
+        }
+
+      top.appendChild(dnodes);
+      top.appendChild(edges);
+      top.appendChild(vnodes);
+      return top;
+    }
+
+    
     // Make a button or label. If the callback is null, it's just a label.
     public function makeButton(label:String, x:int, y:int, width:int, callback:Function):TextField {
       var button:TextField = new TextField();
@@ -1104,17 +1200,19 @@ package {
       controls.addChild(makeButton("Elevation", 50, y+22, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('elevation'), 'elevation.data');
-                            e.stopPropagation();
                           }));
       controls.addChild(makeButton("Moisture", 50, y+44, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('moisture'), 'moisture.data');
-                            e.stopPropagation();
                           }));
       controls.addChild(makeButton("Overrides", 50, y+66, 100,
                           function (e:Event):void {
                             new FileReference().save(makeExport('overrides'), 'overrides.data');
-                            e.stopPropagation();
+                          }));
+
+      controls.addChild(makeButton("Export Polygons (slow)", 25, y+100, 150,
+                          function (e:Event):void {
+                            new FileReference().save(exportPolygons().toString(), 'map.xml');
                           }));
     }
     
