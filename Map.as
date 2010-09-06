@@ -712,27 +712,27 @@ package {
           } else if (p.water) {
             p.biome = 'LAKE';
             if (p.elevation < 0.1) p.biome = 'MARSH';
-            if (p.elevation > 0.85) p.biome = 'ICE';
+            if (p.elevation > 0.8) p.biome = 'ICE';
           } else if (p.coast) {
             p.biome = 'BEACH';
           } else if (p.elevation > 0.8) {
-            if (p.moisture > 0.5) p.biome = 'SNOW';
-            else if (p.moisture > 0.3) p.biome = 'TUNDRA';
-            else if (p.moisture > 0.1) p.biome = 'BARE';
+            if (p.moisture > 0.50) p.biome = 'SNOW';
+            else if (p.moisture > 0.33) p.biome = 'TUNDRA';
+            else if (p.moisture > 0.16) p.biome = 'BARE';
             else p.biome = 'SCORCHED';
           } else if (p.elevation > 0.6) {
-            if (p.moisture > 0.6) p.biome = 'TAIGA';
-            else if (p.moisture > 0.3) p.biome = 'SHRUBLAND';
+            if (p.moisture > 0.66) p.biome = 'TAIGA';
+            else if (p.moisture > 0.33) p.biome = 'SHRUBLAND';
             else p.biome = 'TEMPERATE_DESERT';
           } else if (p.elevation > 0.3) {
-            if (p.moisture > 0.8) p.biome = 'TEMPERATE_RAIN_FOREST';
-            else if (p.moisture > 0.5) p.biome = 'TEMPERATE_DECIDUOUS_FOREST';
-            else if (p.moisture > 0.1) p.biome = 'GRASSLAND';
+            if (p.moisture > 0.83) p.biome = 'TEMPERATE_RAIN_FOREST';
+            else if (p.moisture > 0.50) p.biome = 'TEMPERATE_DECIDUOUS_FOREST';
+            else if (p.moisture > 0.16) p.biome = 'GRASSLAND';
             else p.biome = 'TEMPERATE_DESERT';
           } else {
-            if (p.moisture > 0.6) p.biome = 'TROPICAL_RAIN_FOREST';
-            else if (p.moisture > 0.3) p.biome = 'TROPICAL_SEASONAL_FOREST';
-            else if (p.moisture > 0.1) p.biome = 'GRASSLAND';
+            if (p.moisture > 0.66) p.biome = 'TROPICAL_RAIN_FOREST';
+            else if (p.moisture > 0.33) p.biome = 'TROPICAL_SEASONAL_FOREST';
+            else if (p.moisture > 0.16) p.biome = 'GRASSLAND';
             else p.biome = 'SUBTROPICAL_DESERT';
           }
         }
