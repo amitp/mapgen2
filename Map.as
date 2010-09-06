@@ -338,6 +338,7 @@ package {
           // the edge from the voronoi library.
           var edge:Edge = new Edge();
           edge.index = edges.length;
+          edge.river = 0;
           edges.push(edge);
           edge.midpoint = vedge.p0 && vedge.p1 && Point.interpolate(vedge.p0, vedge.p1, 0.5);
 
