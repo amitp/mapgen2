@@ -701,37 +701,41 @@ package {
     // on low/high elevation and low/medium/high moisture. This is
     // roughly based on the Whittaker diagram but adapted to fit the
     // needs of the island map generator.
+    static public function getBiome(p:Center):String {
+      if (p.ocean) {
+        return 'OCEAN';
+      } else if (p.water) {
+        if (p.elevation < 0.1) return 'MARSH';
+        if (p.elevation > 0.8) return 'ICE';
+        return 'LAKE';
+      } else if (p.coast) {
+        return 'BEACH';
+      } else if (p.elevation > 0.8) {
+        if (p.moisture > 0.50) return 'SNOW';
+        else if (p.moisture > 0.33) return 'TUNDRA';
+        else if (p.moisture > 0.16) return 'BARE';
+        else return 'SCORCHED';
+      } else if (p.elevation > 0.6) {
+        if (p.moisture > 0.66) return 'TAIGA';
+        else if (p.moisture > 0.33) return 'SHRUBLAND';
+        else return 'TEMPERATE_DESERT';
+      } else if (p.elevation > 0.3) {
+        if (p.moisture > 0.83) return 'TEMPERATE_RAIN_FOREST';
+        else if (p.moisture > 0.50) return 'TEMPERATE_DECIDUOUS_FOREST';
+        else if (p.moisture > 0.16) return 'GRASSLAND';
+        else return 'TEMPERATE_DESERT';
+      } else {
+        if (p.moisture > 0.66) return 'TROPICAL_RAIN_FOREST';
+        else if (p.moisture > 0.33) return 'TROPICAL_SEASONAL_FOREST';
+        else if (p.moisture > 0.16) return 'GRASSLAND';
+        else return 'SUBTROPICAL_DESERT';
+      }
+    }
+    
     public function assignBiomes():void {
       var p:Center;
       for each (p in centers) {
-          if (p.ocean) {
-            p.biome = 'OCEAN';
-          } else if (p.water) {
-            p.biome = 'LAKE';
-            if (p.elevation < 0.1) p.biome = 'MARSH';
-            if (p.elevation > 0.8) p.biome = 'ICE';
-          } else if (p.coast) {
-            p.biome = 'BEACH';
-          } else if (p.elevation > 0.8) {
-            if (p.moisture > 0.50) p.biome = 'SNOW';
-            else if (p.moisture > 0.33) p.biome = 'TUNDRA';
-            else if (p.moisture > 0.16) p.biome = 'BARE';
-            else p.biome = 'SCORCHED';
-          } else if (p.elevation > 0.6) {
-            if (p.moisture > 0.66) p.biome = 'TAIGA';
-            else if (p.moisture > 0.33) p.biome = 'SHRUBLAND';
-            else p.biome = 'TEMPERATE_DESERT';
-          } else if (p.elevation > 0.3) {
-            if (p.moisture > 0.83) p.biome = 'TEMPERATE_RAIN_FOREST';
-            else if (p.moisture > 0.50) p.biome = 'TEMPERATE_DECIDUOUS_FOREST';
-            else if (p.moisture > 0.16) p.biome = 'GRASSLAND';
-            else p.biome = 'TEMPERATE_DESERT';
-          } else {
-            if (p.moisture > 0.66) p.biome = 'TROPICAL_RAIN_FOREST';
-            else if (p.moisture > 0.33) p.biome = 'TROPICAL_SEASONAL_FOREST';
-            else if (p.moisture > 0.16) p.biome = 'GRASSLAND';
-            else p.biome = 'SUBTROPICAL_DESERT';
-          }
+          p.biome = getBiome(p);
         }
     }
 
