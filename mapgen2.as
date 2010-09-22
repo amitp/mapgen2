@@ -90,6 +90,7 @@ package {
     public var map:Map;
     public var roads:Roads;
     public var lava:Lava;
+    public var watersheds:Watersheds;
     public var noisyEdges:NoisyEdges;
 
 
@@ -171,6 +172,7 @@ package {
 
       roads = new Roads();
       lava = new Lava();
+      watersheds = new Watersheds();
       noisyEdges = new NoisyEdges();
       
       commandExecute("Shaping map...",
@@ -208,6 +210,7 @@ package {
                      function():void {
                        roads.createRoads(map);
                        lava.createLava(map, map.mapRandom.nextDouble);
+                       watersheds.createWatersheds(map);
                        noisyEdges.buildNoisyEdges(map, lava, map.mapRandom);
                        drawMap(mapMode);
                      });
@@ -810,30 +813,29 @@ package {
 
     // Render the paths from each polygon to the ocean, showing watersheds
     public function renderWatersheds(graphics:Graphics):void {
-      var q:Corner, r:Corner;
+      var edge:Edge, w0:int, w1:int;
 
-      for each (q in map.corners) {
-          if (!q.ocean) {
-            r = q.downslope;
-            graphics.lineStyle(1.2, q.watershed == r.watershed? 0x00ffff : 0xff00ff,
-                               0.1*Math.sqrt(q.watershed.watershed_size || 1));
-            graphics.moveTo(q.point.x, q.point.y);
-            graphics.lineTo(r.point.x, r.point.y);
-            graphics.lineStyle();
+      for each (edge in map.edges) {
+          if (edge.d0 && edge.d1 && edge.v0 && edge.v1
+              && !edge.d0.ocean && !edge.d1.ocean) {
+            w0 = watersheds.watersheds[edge.d0.index];
+            w1 = watersheds.watersheds[edge.d1.index];
+            if (w0 != w1) {
+              graphics.lineStyle(3.5, 0x000000, 0.1*Math.sqrt((map.corners[w0].watershed_size || 1) + (map.corners[w1].watershed.watershed_size || 1)));
+              graphics.moveTo(edge.v0.point.x, edge.v0.point.y);
+              graphics.lineTo(edge.v1.point.x, edge.v1.point.y);
+              graphics.lineStyle();
+            }
           }
         }
-      
-      for each (q in map.corners) {
-          for each (r in q.adjacent) {
-              if (!q.ocean && !r.ocean && q.watershed != r.watershed && !q.coast && !r.coast) {
-                var edge:Edge = map.lookupEdgeFromCorner(q, r);
-                graphics.lineStyle(2.5, 0x000000, 0.05*Math.sqrt((q.watershed.watershed_size || 1) + (r.watershed.watershed_size || 1)));
-                graphics.moveTo(edge.d0.point.x, edge.d0.point.y);
-                graphics.lineTo(edge.midpoint.x, edge.midpoint.y);
-                graphics.lineTo(edge.d1.point.x, edge.d1.point.y);
-                graphics.lineStyle();
-              }
-            }
+
+      for each (edge in map.edges) {
+          if (edge.river) {
+            graphics.lineStyle(1.0, 0x6699ff);
+            graphics.moveTo(edge.v0.point.x, edge.v0.point.y);
+            graphics.lineTo(edge.v1.point.x, edge.v1.point.y);
+            graphics.lineStyle();
+          }
         }
     }
     
