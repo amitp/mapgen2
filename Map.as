@@ -129,6 +129,7 @@ package {
              function():void {
                var voronoi:Voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
                buildGraph(points, voronoi);
+               improveCorners();
                voronoi.dispose();
                voronoi = null;
                points = null;
@@ -247,6 +248,49 @@ package {
     }
     
 
+    // Although Lloyd relaxation improves the uniformity of polygon
+    // sizes, it doesn't help with the edge lengths. Short edges can
+    // be bad for some games, and lead to weird artifacts on
+    // rivers. We can easily lengthen short edges by moving the
+    // corners, but **we lose the Voronoi property**.  The corners are
+    // moved to the average of the polygon centers around them. Short
+    // edges become longer. Long edges tend to become shorter. The
+    // polygons tend to be more uniform after this step.
+    public function improveCorners():void {
+      var newCorners:Vector.<Point> = new Vector.<Point>(corners.length);
+      var q:Corner, r:Center, point:Point, i:int, edge:Edge;
+
+      // First we compute the average of the centers next to each corner.
+      for each (q in corners) {
+          if (q.border) {
+            newCorners[q.index] = q.point;
+          } else {
+            point = new Point(0.0, 0.0);
+            for each (r in q.touches) {
+                point.x += r.point.x;
+                point.y += r.point.y;
+              }
+            point.x /= q.touches.length;
+            point.y /= q.touches.length;
+            newCorners[q.index] = point;
+          }
+        }
+
+      // Move the corners to the new locations.
+      for (i = 0; i < corners.length; i++) {
+        corners[i].point = newCorners[i];
+      }
+
+      // The edge midpoints were computed for the old corners and need
+      // to be recomputed.
+      for each (edge in edges) {
+          if (edge.v0 && edge.v1) {
+            edge.midpoint = Point.interpolate(edge.v0.point, edge.v1.point, 0.5);
+          }
+        }
+    }
+
+    
     // Create an array of corners that are on land only, for use by
     // algorithms that work only on land.  We return an array instead
     // of a vector because the redistribution algorithms want to sort
@@ -320,6 +364,8 @@ package {
         q.index = corners.length;
         corners.push(q);
         q.point = point;
+        q.border = (point.x == 0 || point.x == SIZE
+                    || point.y == 0 || point.y == SIZE);
         q.touches = new Vector.<Center>();
         q.protrudes = new Vector.<Edge>();
         q.adjacent = new Vector.<Corner>();
@@ -411,9 +457,8 @@ package {
 
       for each (q in corners) {
           // The edges of the map are elevation 0
-          if (q.point.x == 0 || q.point.x == SIZE || q.point.y == 0 || q.point.y == SIZE) {
+          if (q.border) {
             q.elevation = 0.0;
-            q.border = true;
             queue.push(q);
           } else {
             q.elevation = Infinity;
