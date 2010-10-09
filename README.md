@@ -29,6 +29,8 @@ rivers, swamps, etc. can be named. Polygons are rendered into a bitmap
 to produce the tile map, but the underlying polygon structure is still
 available.
 
+The [full process is described here](http://www-cs-students.stanford.edu/~amitp/game-programming/polygon-map-generation/).
+
 History:
 
 *   I started out with C++ code that used mountains, soil erosion, water flow, water erosion, water evaporation, volanoes, lava flow, and other physical processes to sculpt terrain expressed in a 2d array of tiles. However as described [in this blog post](http://simblob.blogspot.com/2010/06/teleological-vs-ontogenetic-map.html) I decided to abandon this approach.
