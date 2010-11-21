@@ -3,6 +3,7 @@
 // License: MIT
 
 package {
+  import amitp.Debug;
   import graph.*;
   import flash.geom.*;
   import flash.display.*;
