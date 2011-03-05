@@ -1070,9 +1070,9 @@ package {
           vnodes.appendChild
             (<corner id={q.index}
                      x={q.point.x} y={q.point.y}
-                     water={p.water} ocean={p.ocean}
-                     coast={p.coast} border={p.border}
-                     elevation={p.elevation} moisture={p.moisture}
+                     water={q.water} ocean={q.ocean}
+                     coast={q.coast} border={q.border}
+                     elevation={q.elevation} moisture={q.moisture}
                      river={q.river} downslope={q.downslope?q.downslope.index:-1}>
                {touches}
                {protrudes}
