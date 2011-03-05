@@ -381,8 +381,7 @@ package {
     // calls fillFunction to draw the desired path.
     private function drawGradientTriangle(graphics:Graphics,
                                           v1:Vector3D, v2:Vector3D, v3:Vector3D,
-                                          color1:uint, color2:uint,
-                                          fillFunction:Function):void {
+                                          colors:Array, fillFunction:Function):void {
       var m:Matrix = new Matrix();
 
       // Center of triangle:
@@ -403,8 +402,18 @@ package {
         // If the gradient vector is small, there's not much
         // difference in colors across this triangle. Use a plain
         // fill, because the numeric accuracy of 1/G.length is not to
-        // be trusted.
-        graphics.beginFill(interpolateColor(color1, color2, V.z));
+        // be trusted.  NOTE: only works for 1, 2, 3 colors in the array
+        var color:uint = colors[0];
+        if (colors.length == 2) {
+          color = interpolateColor(colors[0], colors[1], V.z);
+        } else if (colors.length == 3) {
+          if (V.z < 0.5) {
+            color = interpolateColor(colors[0], colors[1], V.z*2);
+          } else {
+            color = interpolateColor(colors[1], colors[2], V.z*2-1);
+          }
+        }
+        graphics.beginFill(color);
       } else {
         // The gradient box is weird to set up, so we let Flash set up
         // a basic matrix and then we alter it:
@@ -413,8 +422,9 @@ package {
         m.scale((1/G.length), (1/G.length));
         m.rotate(Math.atan2(G.y, G.x));
         m.translate(C.x, C.y);
-        graphics.beginGradientFill(GradientType.LINEAR, [color1, color2],
-                                   [1, 1], [0x00, 0xff], m, SpreadMethod.PAD);
+        var alphas:Array = colors.map(function (_:*, index:int, A:Array):Number { return 1.0; });
+        var spread:Array = colors.map(function (_:*, index:int, A:Array):int { return 255*index/(A.length-1); });
+        graphics.beginGradientFill(GradientType.LINEAR, colors, alphas, spread, m, SpreadMethod.PAD);
       }
       fillFunction();
       graphics.endFill();
@@ -607,13 +617,13 @@ package {
                    new Vector3D(p.point.x, p.point.y, p[gradientFillProperty]),
                    new Vector3D(corner0.point.x, corner0.point.y, corner0[gradientFillProperty]),
                    new Vector3D(midpoint.x, midpoint.y, midpointAttr),
-                   colors.GRADIENT_LOW, colors.GRADIENT_HIGH, drawPath0);
+                   [colors.GRADIENT_LOW, colors.GRADIENT_HIGH], drawPath0);
                 drawGradientTriangle
                   (graphics,
                    new Vector3D(p.point.x, p.point.y, p[gradientFillProperty]),
                    new Vector3D(midpoint.x, midpoint.y, midpointAttr),
                    new Vector3D(corner1.point.x, corner1.point.y, corner1[gradientFillProperty]),
-                   colors.GRADIENT_LOW, colors.GRADIENT_HIGH, drawPath1);
+                   [colors.GRADIENT_LOW, colors.GRADIENT_HIGH], drawPath1);
               } else {
                 graphics.beginFill(color);
                 drawPath0();
@@ -842,6 +852,19 @@ package {
     
 
     private var lightVector:Vector3D = new Vector3D(-1, -1, 0);
+    public function calculateLighting(p:Center, r:Corner, s:Corner):Number {
+      var A:Vector3D = new Vector3D(p.point.x, p.point.y, p.elevation);
+      var B:Vector3D = new Vector3D(r.point.x, r.point.y, r.elevation);
+      var C:Vector3D = new Vector3D(s.point.x, s.point.y, s.elevation);
+      var normal:Vector3D = B.subtract(A).crossProduct(C.subtract(A));
+      if (normal.z < 0) { normal.scaleBy(-1); }
+      normal.normalize();
+      var light:Number = 0.5 + 35*normal.dotProduct(lightVector);
+      if (light < 0) light = 0;
+      if (light > 1) light = 1;
+      return light;
+    }
+    
     public function colorWithSlope(color:int, p:Center, q:Center, edge:Edge):int {
       var r:Corner = edge.v0;
       var s:Corner = edge.v1;
@@ -855,15 +878,7 @@ package {
       if (q != null && p.water == q.water) color = interpolateColor(color, displayColors[q.biome], 0.4);
       var colorLow:int = interpolateColor(color, 0x333333, 0.7);
       var colorHigh:int = interpolateColor(color, 0xffffff, 0.3);
-      var A:Vector3D = new Vector3D(p.point.x, p.point.y, p.elevation);
-      var B:Vector3D = new Vector3D(r.point.x, r.point.y, r.elevation);
-      var C:Vector3D = new Vector3D(s.point.x, s.point.y, s.elevation);
-      var normal:Vector3D = B.subtract(A).crossProduct(C.subtract(A));
-      if (normal.z < 0) { normal.scaleBy(-1); }
-      normal.normalize();
-      var light:Number = 0.5 + 35*normal.dotProduct(lightVector);
-      if (light < 0) light = 0;
-      if (light > 1) light = 1;
+      var light:Number = calculateLighting(p, r, s);
       if (light < 0.5) return interpolateColor(colorLow, color, light*2);
       else return interpolateColor(color, colorHigh, light*2-1);
     }
