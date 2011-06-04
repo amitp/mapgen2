@@ -477,7 +477,7 @@ package {
             // number doesn't matter because we'll rescale the
             // elevations later.
             var newElevation:Number = 0.01 + q.elevation;
-            if (!s.water && !s.water) {
+            if (!q.water && !s.water) {
               newElevation += 1;
             }
             // If this point changed, we'll add it to the queue so
