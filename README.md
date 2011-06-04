@@ -44,6 +44,3 @@ History:
 
 * [My fork of as3delaunay](http://github.com/amitp/as3delaunay)
 * de.polygonal.math.PM_PRNG.as
-* My Debug.as (remove the lines that call Debug.trace and you'll be fine)
-
-
