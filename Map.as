@@ -3,7 +3,6 @@
 // License: MIT
 
 package {
-  import amitp.Debug;
   import graph.*;
   import flash.geom.*;
   import flash.utils.Dictionary;
@@ -100,7 +99,6 @@ package {
       function timeIt(name:String, fn:Function):void {
         var t:Number = getTimer();
         fn();
-        Debug.trace("TIME for", name, ":", getTimer()-t);
       }
       
       // Generate the initial random set of points
@@ -680,7 +678,6 @@ package {
         // Bias rivers to go west: if (q.downslope.x > q.x) continue;
         while (!q.coast) {
           if (q == q.downslope) {
-            Debug.trace("Downslope failed", q.elevation);
             break;
           }
           edge = lookupEdgeFromCorner(q, q.downslope);

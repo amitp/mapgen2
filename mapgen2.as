@@ -3,7 +3,6 @@
 // License: MIT
 
 package {
-  import amitp.Debug;
   import graph.*;
   import flash.geom.*;
   import flash.display.*;
@@ -103,8 +102,6 @@ package {
       noiseLayer.bitmapData.noise(555, 128-10, 128+10, 7, true);
       noiseLayer.blendMode = BlendMode.HARDLIGHT;
 
-      addChild(new Debug(this));
-
       controls.x = SIZE;
       addChild(controls);
 
@@ -150,8 +147,6 @@ package {
       }
       islandType = type;
       map.newIsland(type, seed, variant);
-
-      Debug.trace("TIME for island", type, seed, variant, ":", getTimer()-t);
     }
 
     
@@ -168,7 +163,6 @@ package {
 
     
     public function go(type:String):void {
-      Debug.clear();
       cancelCommands();
 
       roads = new Roads();
@@ -222,7 +216,6 @@ package {
     // remove the handler.
     private var _guiQueue:Array = [];
     private function _onEnterFrame(e:Event):void {
-      if (_guiQueue.length == 0) Debug.trace("ERROR: command queue empty");
       (_guiQueue.shift()[1])();
       if (_guiQueue.length == 0) {
         stage.removeEventListener(Event.ENTER_FRAME, _onEnterFrame);
