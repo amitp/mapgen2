@@ -43,4 +43,4 @@ History:
 ** Requirements:
 
 * [My fork of as3delaunay](http://github.com/amitp/as3delaunay)
-* de.polygonal.math.PM_PRNG.as
+* The AS3 version of [de.polygonal.math.PM_PRNG.as](http://lab.polygonal.de/2007/04/21/a-good-pseudo-random-number-generator-prng/)

@@ -30,7 +30,7 @@ package {
     // initial map upon loading is always deterministic, but
     // subsequent maps reset this random number generator with a
     // random seed.
-    public var mapRandom:PM_PRNG = new PM_PRNG(100);
+    public var mapRandom:PM_PRNG = new PM_PRNG();
 
     // These store the graph data
     public var points:Vector.<Point>;  // Only useful during map construction
@@ -824,7 +824,8 @@ class IslandShape {
   // The radial island radius is based on overlapping sine waves 
   static public var ISLAND_FACTOR:Number = 1.07;  // 1.0 means no small islands; 2.0 leads to a lot
   static public function makeRadial(seed:int):Function {
-    var islandRandom:PM_PRNG = new PM_PRNG(seed);
+    var islandRandom:PM_PRNG = new PM_PRNG();
+    islandRandom.seed = seed;
     var bumps:int = islandRandom.nextIntRange(1, 6);
     var startAngle:Number = islandRandom.nextDoubleRange(0, 2*Math.PI);
     var dipAngle:Number = islandRandom.nextDoubleRange(0, 2*Math.PI);
