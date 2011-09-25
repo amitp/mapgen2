@@ -984,9 +984,14 @@ package {
     }
 
 
-    // Export the graph data as XML (slow)
-    public function exportPolygons():XML {
+    // Export the graph data as XML.
+    public function exportPolygons():String {
+      // NOTE: For performance, we do not assemble the entire XML in
+      // memory and then serialize it. Instead, we incrementally
+      // serialize small portions into arrays of strings, and then assemble the
+      // strings together.
       var p:Center, q:Corner, r:Center, s:Corner, edge:Edge;
+      XML.prettyPrinting = false;
       var top:XML =
         <map
           shape={islandSeedInput.text}
@@ -995,40 +1000,37 @@ package {
           <generator
              url="http://www-cs-students.stanford.edu/~amitp/game-programming/polygon-map-generation/"
              timestamp={new Date().toUTCString()} />
+          <REPLACE/>
         </map>;
-      var dnodes:XML = <centers/>;
-      var edges:XML = <edges/>;
-      var vnodes:XML = <corners/>;
-      var borders:XML, neighbors:XML, corners:XML;
-      var touches:XML, protrudes:XML, adjacent:XML;
+
+      var dnodes:Array = [];
+      var edges:Array = [];
+      var vnodes:Array = [];
+      var accum:Array = [];  // temporary accumulator for serialized xml fragments
       var edgeNode:XML;
 
       for each (p in map.centers) {
-          borders = <borders/>;
-          neighbors = <neighbors/>;
-          corners = <corners/>;
+          accum.splice(0, accum.length);
 
           for each (r in p.neighbors) {
-              neighbors.appendChild(<center id={r.index}/>);
+              accum.push(<center id={r.index}/>.toString());
             }
           for each (edge in p.borders) {
-              borders.appendChild(<edge id={edge.index}/>);
+              accum.push(<edge id={edge.index}/>.toString());
             }
           for each (q in p.corners) {
-              corners.appendChild(<corner id={q.index}/>);
+              accum.push(<corner id={q.index}/>.toString());
             }
           
-          dnodes.appendChild
+          dnodes.push
             (<center id={p.index}
                      x={p.point.x} y={p.point.y}
                      water={p.water} ocean={p.ocean}
                      coast={p.coast} border={p.border}
                      biome={p.biome}
                      elevation={p.elevation} moisture={p.moisture}>
-               {neighbors}
-               {borders}
-               {corners}
-             </center>);
+               <REPLACE/>
+             </center>.toString().replace("<REPLACE/>", accum.join("")));
         }
 
       for each (edge in map.edges) {
@@ -1042,44 +1044,42 @@ package {
           if (edge.d1 != null) edgeNode.@center1 = edge.d1.index;
           if (edge.v0 != null) edgeNode.@corner0 = edge.v0.index;
           if (edge.v1 != null) edgeNode.@corner1 = edge.v1.index;
-          edges.appendChild(edgeNode);
+          edges.push(edgeNode.toString());
         }
-      
-      for each (q in map.corners) {
-          touches = <touches/>;
-          protrudes = <protrudes/>;
-          adjacent = <adjacent/>;
 
+      for each (q in map.corners) {
+          accum.splice(0, accum.length);
           for each (p in q.touches) {
-              touches.appendChild(<center id={p.index}/>);
+              accum.push(<center id={p.index}/>.toString());
             }
           for each (edge in q.protrudes) {
-              protrudes.appendChild(<edge id={edge.index}/>);
+              accum.push(<edge id={edge.index}/>.toString());
             }
           for each (s in q.adjacent) {
-              corners.appendChild(<corner id={s.index}/>);
+              accum.push(<corner id={s.index}/>.toString());
             }
           
-          vnodes.appendChild
+          vnodes.push
             (<corner id={q.index}
                      x={q.point.x} y={q.point.y}
                      water={q.water} ocean={q.ocean}
                      coast={q.coast} border={q.border}
                      elevation={q.elevation} moisture={q.moisture}
                      river={q.river} downslope={q.downslope?q.downslope.index:-1}>
-               {touches}
-               {protrudes}
-               {adjacent}
-             </corner>);
+               <REPLACE/>
+             </corner>.toString().replace("<REPLACE/>", accum.join("")));
         }
 
-      top.appendChild(dnodes);
-      top.appendChild(edges);
-      top.appendChild(vnodes);
-      return top;
+      var out:String = top.toString();
+      accum = [].concat("<centers>",
+                        dnodes, "</centers><edges>",
+                        edges, "</edges><corners>",
+                        vnodes, "</corners>");
+      out = out.replace("<REPLACE/>", accum.join(""));
+      return out;
     }
 
-    
+
     // Make a button or label. If the callback is null, it's just a label.
     public function makeButton(label:String, x:int, y:int, width:int, callback:Function):TextField {
       var button:TextField = new TextField();
@@ -1222,9 +1222,9 @@ package {
                             new FileReference().save(makeExport('overrides'), 'overrides.data');
                           }));
 
-      controls.addChild(makeButton("Export Polygons (slow)", 25, y+100, 150,
+      controls.addChild(makeButton("Export XML", 25, y+100, 150,
                           function (e:Event):void {
-                            new FileReference().save(exportPolygons().toString(), 'map.xml');
+                            new FileReference().save(exportPolygons(), 'map.xml');
                           }));
     }
     
