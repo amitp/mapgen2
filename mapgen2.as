@@ -153,11 +153,11 @@ package {
     public function graphicsReset():void {
       triangles3d = [];
       graphics.clear();
-      graphics.beginFill(displayColors.OCEAN);
-      graphics.drawRect(0, 0, SIZE, 2000);
-      graphics.endFill();
       graphics.beginFill(0xbbbbaa);
-      graphics.drawRect(SIZE, 0, 2000, 2000);
+      graphics.drawRect(0, 0, 2000, 2000);
+      graphics.endFill();
+      graphics.beginFill(displayColors.OCEAN);
+      graphics.drawRect(0, 0, SIZE, SIZE);
       graphics.endFill();
     }
 
