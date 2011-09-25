@@ -204,7 +204,7 @@ package {
       commandExecute("Edges...",
                      function():void {
                        roads.createRoads(map);
-                       lava.createLava(map, map.mapRandom.nextDouble);
+                       // lava.createLava(map, map.mapRandom.nextDouble);
                        watersheds.createWatersheds(map);
                        noisyEdges.buildNoisyEdges(map, lava, map.mapRandom);
                        drawMap(mapMode);
