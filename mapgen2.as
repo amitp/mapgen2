@@ -1013,13 +1013,13 @@ package {
           accum.splice(0, accum.length);
 
           for each (r in p.neighbors) {
-              accum.push(<center id={r.index}/>.toString());
+              accum.push(<center id={r.index}/>.toXMLString());
             }
           for each (edge in p.borders) {
-              accum.push(<edge id={edge.index}/>.toString());
+              accum.push(<edge id={edge.index}/>.toXMLString());
             }
           for each (q in p.corners) {
-              accum.push(<corner id={q.index}/>.toString());
+              accum.push(<corner id={q.index}/>.toXMLString());
             }
           
           dnodes.push
@@ -1030,7 +1030,7 @@ package {
                      biome={p.biome}
                      elevation={p.elevation} moisture={p.moisture}>
                <REPLACE/>
-             </center>.toString().replace("<REPLACE/>", accum.join("")));
+             </center>.toXMLString().replace("<REPLACE/>", accum.join("")));
         }
 
       for each (edge in map.edges) {
@@ -1044,19 +1044,19 @@ package {
           if (edge.d1 != null) edgeNode.@center1 = edge.d1.index;
           if (edge.v0 != null) edgeNode.@corner0 = edge.v0.index;
           if (edge.v1 != null) edgeNode.@corner1 = edge.v1.index;
-          edges.push(edgeNode.toString());
+          edges.push(edgeNode.toXMLString());
         }
 
       for each (q in map.corners) {
           accum.splice(0, accum.length);
           for each (p in q.touches) {
-              accum.push(<center id={p.index}/>.toString());
+              accum.push(<center id={p.index}/>.toXMLString());
             }
           for each (edge in q.protrudes) {
-              accum.push(<edge id={edge.index}/>.toString());
+              accum.push(<edge id={edge.index}/>.toXMLString());
             }
           for each (s in q.adjacent) {
-              accum.push(<corner id={s.index}/>.toString());
+              accum.push(<corner id={s.index}/>.toXMLString());
             }
           
           vnodes.push
@@ -1067,10 +1067,10 @@ package {
                      elevation={q.elevation} moisture={q.moisture}
                      river={q.river} downslope={q.downslope?q.downslope.index:-1}>
                <REPLACE/>
-             </corner>.toString().replace("<REPLACE/>", accum.join("")));
+             </corner>.toXMLString().replace("<REPLACE/>", accum.join("")));
         }
 
-      var out:String = top.toString();
+      var out:String = top.toXMLString();
       accum = [].concat("<centers>",
                         dnodes, "</centers><edges>",
                         edges, "</edges><corners>",
