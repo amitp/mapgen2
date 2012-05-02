@@ -1,3 +1,3 @@
 [submodule "third-party/as3delaunay"]
 	path = third-party/as3delaunay
-	url = git://github.com/amitp/as3delaunay.git
+	url = git://github.com/nodename/as3delaunay.git
