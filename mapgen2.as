@@ -317,7 +317,7 @@ package {
 
       function drawDistribution(x:Number, y:Number, bucketFn:Function, colorFn:Function,
                                 width:Number, height:Number):void {
-        var scale:Number, i:int, x:Number, w:Number;
+        var scale:Number, i:int, w:Number;
         var histogram:Array = computeHistogram(bucketFn);
       
         scale = 0.0;
