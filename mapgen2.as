@@ -1006,6 +1006,7 @@ package {
       var dnodes:Array = [];
       var edges:Array = [];
       var vnodes:Array = [];
+      var outroads:Array = [];
       var accum:Array = [];  // temporary accumulator for serialized xml fragments
       var edgeNode:XML;
 
@@ -1069,12 +1070,17 @@ package {
                <REPLACE/>
              </corner>.toXMLString().replace("<REPLACE/>", accum.join("")));
         }
+        
+        for (var i:String in roads.road) {
+        	outroads.push(<road edge={i} contour={roads.road[i]} />.toXMLString());
+        }
 
       var out:String = top.toXMLString();
       accum = [].concat("<centers>",
                         dnodes, "</centers><edges>",
                         edges, "</edges><corners>",
-                        vnodes, "</corners>");
+                        vnodes, "</corners><roads>",
+                        outroads, "</roads>");
       out = out.replace("<REPLACE/>", accum.join(""));
       return out;
     }
