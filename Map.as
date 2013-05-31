@@ -371,7 +371,16 @@ package {
         _cornerMap[bucket].push(q);
         return q;
       }
-    
+
+      // Helper functions for the following for loop; ideally these
+      // would be inlined
+      function addToCornerList(v:Vector.<Corner>, x:Corner):void {
+        if (x != null && v.indexOf(x) < 0) { v.push(x); }
+      }
+      function addToCenterList(v:Vector.<Center>, x:Center):void {
+        if (x != null && v.indexOf(x) < 0) { v.push(x); }
+      }
+          
       for each (var libedge:com.nodename.Delaunay.Edge in libedges) {
           var dedge:LineSegment = libedge.delaunayLine();
           var vedge:LineSegment = libedge.voronoiEdge();
@@ -396,13 +405,6 @@ package {
           if (edge.v0 != null) { edge.v0.protrudes.push(edge); }
           if (edge.v1 != null) { edge.v1.protrudes.push(edge); }
 
-          function addToCornerList(v:Vector.<Corner>, x:Corner):void {
-            if (x != null && v.indexOf(x) < 0) { v.push(x); }
-          }
-          function addToCenterList(v:Vector.<Center>, x:Center):void {
-            if (x != null && v.indexOf(x) < 0) { v.push(x); }
-          }
-          
           // Centers point to centers.
           if (edge.d0 != null && edge.d1 != null) {
             addToCenterList(edge.d0.neighbors, edge.d1);
