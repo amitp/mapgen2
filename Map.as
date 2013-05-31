@@ -500,21 +500,24 @@ package {
       // SCALE_FACTOR increases the mountain area. At 1.0 the maximum
       // elevation barely shows up on the map, so we set it to 1.1.
       var SCALE_FACTOR:Number = 1.1;
+      var SCALE_FACTOR_SQRT:Number = Math.sqrt(1.1);
       var i:int, y:Number, x:Number;
 
       locations.sortOn('elevation', Array.NUMERIC);
+      // length won't change, this is for performance
+      var locations_length:Number = locations.length;
       for (i = 0; i < locations.length; i++) {
         // Let y(x) be the total area that we want at elevation <= x.
         // We want the higher elevations to occur less than lower
         // ones, and set the area to be y(x) = 1 - (1-x)^2.
-        y = i/(locations.length-1);
+        y = i/(locations_length-1);
         // Now we have to solve for x, given the known y.
         //  *  y = 1 - (1-x)^2
         //  *  y = 1 - (1 - 2x + x^2)
         //  *  y = 2x - x^2
         //  *  x^2 - 2x + y = 0
         // From this we can use the quadratic equation to get:
-        x = Math.sqrt(SCALE_FACTOR) - Math.sqrt(SCALE_FACTOR*(1-y));
+        x = SCALE_FACTOR_SQRT - Math.sqrt(SCALE_FACTOR*(1-y));
         if (x > 1.0) x = 1.0;  // TODO: does this break downslopes?
         locations[i].elevation = x;
       }
