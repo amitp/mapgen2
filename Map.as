@@ -15,7 +15,6 @@ package {
   public class Map {
     static public var NUM_POINTS:int = 2000;
     static public var LAKE_THRESHOLD:Number = 0.3;  // 0 to 1, fraction of water corners for water polygon
-    static public var NUM_LLOYD_ITERATIONS:int = 2;
 
     // Passed in by the caller:
     public var SIZE:Number;
@@ -39,6 +38,7 @@ package {
     // I continue to use Voronoi here, to reuse the graph building
     // code. If you're using a grid, generate the graph directly.
     public var pointSelector:Function;
+    public var pointLloydIterations:int;
     
     // These store the graph data
     public var points:Vector.<Point>;  // Only useful during map construction
@@ -52,9 +52,10 @@ package {
     }
     
     // Random parameters governing the overall shape of the island
-    public function newIsland(islandType:String, pointType:String, seed:int, variant:int):void {
+    public function newIsland(islandType:String, pointType:String, lloydIterations:int, seed:int, variant:int):void {
       islandShape = IslandShape['make'+islandType](seed);
       pointSelector = PointSelector['generate'+pointType](SIZE, seed);
+      pointLloydIterations = lloydIterations;
       mapRandom.seed = variant;
     }
 
@@ -222,7 +223,7 @@ package {
       // it will turn into a grid, but convergence is very slow, and we only
       // run it a few times.
       var i:int, p:Point, q:Point, voronoi:Voronoi, region:Vector.<Point>;
-      for (i = 0; i < NUM_LLOYD_ITERATIONS; i++) {
+      for (i = 0; i < pointLloydIterations; i++) {
         voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
         for each (p in points) {
             region = voronoi.region(p);
@@ -890,6 +891,34 @@ class PointSelector {
         p = new Point(mapRandom.nextDoubleRange(10, size-10),
                       mapRandom.nextDoubleRange(10, size-10));
         points.push(p);
+      }
+      return points;
+    }
+  }
+
+  // Generate points on a square grid
+  static public function generateSquare(size:int, seed:int):Function {
+    return function(numPoints:int):Vector.<Point> {
+      var points:Vector.<Point> = new Vector.<Point>();
+      var N:int = Math.sqrt(numPoints);
+      for (var x:int = 0; x < N; x++) {
+        for (var y:int = 0; y < N; y++) {
+          points.push(new Point((0.5 + x)/N * size, (0.5 + y)/N * size));
+        }
+      }
+      return points;
+    }
+  }
+
+  // Generate points on a square grid
+  static public function generateHexagon(size:int, seed:int):Function {
+    return function(numPoints:int):Vector.<Point> {
+      var points:Vector.<Point> = new Vector.<Point>();
+      var N:int = Math.sqrt(numPoints);
+      for (var x:int = 0; x < N; x++) {
+        for (var y:int = 0; y < N; y++) {
+          points.push(new Point((0.5 + x)/N * size, (0.25 + 0.5*x%2 + y)/N * size));
+        }
       }
       return points;
     }

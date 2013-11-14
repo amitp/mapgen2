@@ -150,7 +150,8 @@ package {
       }
       islandType = newIslandType;
       pointType = newPointType;
-      map.newIsland(islandType, pointType, seed, variant);
+      var pointLloydIterations:int = (pointType == 'Random')? 2 : 0;
+      map.newIsland(islandType, pointType, pointLloydIterations, seed, variant);
     }
 
     
