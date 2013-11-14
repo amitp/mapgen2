@@ -38,7 +38,6 @@ package {
     // I continue to use Voronoi here, to reuse the graph building
     // code. If you're using a grid, generate the graph directly.
     public var pointSelector:Function;
-    public var pointLloydIterations:int;
     
     // These store the graph data
     public var points:Vector.<Point>;  // Only useful during map construction
@@ -52,10 +51,9 @@ package {
     }
     
     // Random parameters governing the overall shape of the island
-    public function newIsland(islandType:String, pointType:String, lloydIterations:int, seed:int, variant:int):void {
+    public function newIsland(islandType:String, pointType:String, seed:int, variant:int):void {
       islandShape = IslandShape['make'+islandType](seed);
       pointSelector = PointSelector['generate'+pointType](SIZE, seed);
-      pointLloydIterations = lloydIterations;
       mapRandom.seed = variant;
     }
 
@@ -119,13 +117,6 @@ package {
             points = pointSelector(NUM_POINTS);
           }]);
 
-      stages.push
-        (["Improve points...",
-          function():void {
-            improveRandomPoints(points);
-          }]);
-
-      
       // Create a graph structure from the Voronoi edge list. The
       // methods in the Voronoi object are somewhat inconvenient for
       // my needs, so I transform that data into the data I actually
@@ -209,39 +200,6 @@ package {
     }
 
     
-    // Improve the random set of points with Lloyd Relaxation.
-    public function improveRandomPoints(points:Vector.<Point>):void {
-      // We'd really like to generate "blue noise". Algorithms:
-      // 1. Poisson dart throwing: check each new point against all
-      //     existing points, and reject it if it's too close.
-      // 2. Start with a hexagonal grid and randomly perturb points.
-      // 3. Lloyd Relaxation: move each point to the centroid of the
-      //     generated Voronoi polygon, then generate Voronoi again.
-      // 4. Use force-based layout algorithms to push points away.
-      // 5. More at http://www.cs.virginia.edu/~gfx/pubs/antimony/
-      // Option 3 is implemented here. If it's run for too many iterations,
-      // it will turn into a grid, but convergence is very slow, and we only
-      // run it a few times.
-      var i:int, p:Point, q:Point, voronoi:Voronoi, region:Vector.<Point>;
-      for (i = 0; i < pointLloydIterations; i++) {
-        voronoi = new Voronoi(points, null, new Rectangle(0, 0, SIZE, SIZE));
-        for each (p in points) {
-            region = voronoi.region(p);
-            p.x = 0.0;
-            p.y = 0.0;
-            for each (q in region) {
-                p.x += q.x;
-                p.y += q.y;
-              }
-            p.x /= region.length;
-            p.y /= region.length;
-            region.splice(0, region.length);
-          }
-        voronoi.dispose();
-      }
-    }
-    
-
     // Although Lloyd relaxation improves the uniformity of polygon
     // sizes, it doesn't help with the edge lengths. Short edges can
     // be bad for some games, and lead to weird artifacts on
@@ -880,7 +838,13 @@ class IslandShape {
 
 
 // Factory class to choose points for the graph
+import flash.geom.Point;
+import flash.geom.Rectangle;
+import com.nodename.Delaunay.Voronoi;
+import de.polygonal.math.PM_PRNG;
 class PointSelector {
+  static public var NUM_LLOYD_RELAXATIONS:int = 2;
+  
   // Generate points at random locations
   static public function generateRandom(size:int, seed:int):Function {
     return function(numPoints:int):Vector.<Point> {
@@ -896,6 +860,44 @@ class PointSelector {
     }
   }
 
+
+  // Improve the random set of points with Lloyd Relaxation
+  static public function generateRelaxed(size:int, seed:int):Function {
+    return function(numPoints:int):Vector.<Point> {
+      // We'd really like to generate "blue noise". Algorithms:
+      // 1. Poisson dart throwing: check each new point against all
+      //     existing points, and reject it if it's too close.
+      // 2. Start with a hexagonal grid and randomly perturb points.
+      // 3. Lloyd Relaxation: move each point to the centroid of the
+      //     generated Voronoi polygon, then generate Voronoi again.
+      // 4. Use force-based layout algorithms to push points away.
+      // 5. More at http://www.cs.virginia.edu/~gfx/pubs/antimony/
+      // Option 3 is implemented here. If it's run for too many iterations,
+      // it will turn into a grid, but convergence is very slow, and we only
+      // run it a few times.
+      var i:int, p:Point, q:Point, voronoi:Voronoi, region:Vector.<Point>;
+      var points:Vector.<Point> = generateRandom(size, seed)(numPoints);
+      for (i = 0; i < NUM_LLOYD_RELAXATIONS; i++) {
+        voronoi = new Voronoi(points, null, new Rectangle(0, 0, size, size));
+        for each (p in points) {
+            region = voronoi.region(p);
+            p.x = 0.0;
+            p.y = 0.0;
+            for each (q in region) {
+                p.x += q.x;
+                p.y += q.y;
+              }
+            p.x /= region.length;
+            p.y /= region.length;
+            region.splice(0, region.length);
+          }
+        voronoi.dispose();
+      }
+      return points;
+    }
+  }
+    
+  
   // Generate points on a square grid
   static public function generateSquare(size:int, seed:int):Function {
     return function(numPoints:int):Vector.<Point> {
@@ -910,6 +912,7 @@ class PointSelector {
     }
   }
 
+  
   // Generate points on a square grid
   static public function generateHexagon(size:int, seed:int):Function {
     return function(numPoints:int):Vector.<Point> {

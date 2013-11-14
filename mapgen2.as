@@ -150,8 +150,7 @@ package {
       }
       islandType = newIslandType;
       pointType = newPointType;
-      var pointLloydIterations:int = (pointType == 'Random')? 2 : 0;
-      map.newIsland(islandType, pointType, pointLloydIterations, seed, variant);
+      map.newIsland(islandType, pointType, seed, variant);
     }
 
     
@@ -186,22 +185,16 @@ package {
                        drawMap('polygons');
                      });
 
-      commandExecute("Improving points...",
-                     function():void {
-                       map.go(1, 2);
-                       drawMap('polygons');
-                     });
-      
       commandExecute("Building graph...",
                      function():void {
-                       map.go(2, 3);
+                       map.go(1, 2);
                        map.assignBiomes();
                        drawMap('polygons');
                      });
       
       commandExecute("Features...",
                      function():void {
-                       map.go(3, 6);
+                       map.go(2, 5);
                        map.assignBiomes();
                        drawMap('polygons');
                      });
