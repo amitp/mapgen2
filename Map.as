@@ -32,6 +32,14 @@ package {
     // random seed.
     public var mapRandom:PM_PRNG = new PM_PRNG();
 
+    // Point selection is random for the original article, with Lloyd
+    // Relaxation, but there are other ways of choosing points. Grids
+    // in particular can be much simpler to start with, because you
+    // don't need Voronoi at all. HOWEVER for ease of implementation,
+    // I continue to use Voronoi here, to reuse the graph building
+    // code. If you're using a grid, generate the graph directly.
+    public var pointSelector:Function;
+    
     // These store the graph data
     public var points:Vector.<Point>;  // Only useful during map construction
     public var centers:Vector.<Center>;
@@ -46,6 +54,7 @@ package {
     // Random parameters governing the overall shape of the island
     public function newIsland(islandType:String, pointType:String, seed:int, variant:int):void {
       islandShape = IslandShape['make'+islandType](seed);
+      pointSelector = PointSelector['generate'+pointType](SIZE, seed);
       mapRandom.seed = variant;
     }
 
@@ -106,7 +115,7 @@ package {
         (["Place points...",
           function():void {
             reset();
-            points = generateRandomPoints();
+            points = pointSelector(NUM_POINTS);
           }]);
 
       stages.push
@@ -196,21 +205,6 @@ package {
       for (var i:int = first; i < last; i++) {
           timeIt(stages[i][0], stages[i][1]);
         }
-    }
-
-    
-    // Generate random points and assign them to be on the island or
-    // in the water. Some water points are inland lakes; others are
-    // ocean. We'll determine ocean later by looking at what's
-    // connected to ocean.
-    public function generateRandomPoints():Vector.<Point> {
-      var p:Point, i:int, points:Vector.<Point> = new Vector.<Point>();
-      for (i = 0; i < NUM_POINTS; i++) {
-        p = new Point(mapRandom.nextDoubleRange(10, SIZE-10),
-                      mapRandom.nextDoubleRange(10, SIZE-10));
-        points.push(p);
-      }
-      return points;
     }
 
     
@@ -881,4 +875,23 @@ class IslandShape {
     };
   }
   
+}
+
+
+// Factory class to choose points for the graph
+class PointSelector {
+  // Generate points at random locations
+  static public function generateRandom(size:int, seed:int):Function {
+    return function(numPoints:int):Vector.<Point> {
+      var mapRandom:PM_PRNG = new PM_PRNG();
+      mapRandom.seed = seed;
+      var p:Point, i:int, points:Vector.<Point> = new Vector.<Point>();
+      for (i = 0; i < numPoints; i++) {
+        p = new Point(mapRandom.nextDoubleRange(10, size-10),
+                      mapRandom.nextDoubleRange(10, size-10));
+        points.push(p);
+      }
+      return points;
+    }
+  }
 }
