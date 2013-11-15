@@ -13,12 +13,11 @@ package {
   import de.polygonal.math.PM_PRNG;
 
   public class Map {
-    static public var NUM_POINTS:int = 2000;
     static public var LAKE_THRESHOLD:Number = 0.3;  // 0 to 1, fraction of water corners for water polygon
 
     // Passed in by the caller:
     public var SIZE:Number;
-    
+
     // Island shape is controlled by the islandRandom seed and the
     // type of island, passed in when we set the island shape. The
     // islandShape function uses both of them to determine whether any
@@ -30,6 +29,7 @@ package {
     // subsequent maps reset this random number generator with a
     // random seed.
     public var mapRandom:PM_PRNG = new PM_PRNG();
+    public var needsMoreRandomness:Boolean; // see comment in PointSelector
 
     // Point selection is random for the original article, with Lloyd
     // Relaxation, but there are other ways of choosing points. Grids
@@ -38,6 +38,7 @@ package {
     // I continue to use Voronoi here, to reuse the graph building
     // code. If you're using a grid, generate the graph directly.
     public var pointSelector:Function;
+    public var numPoints:int;
     
     // These store the graph data
     public var points:Vector.<Point>;  // Only useful during map construction
@@ -47,13 +48,16 @@ package {
 
     public function Map(size:Number) {
       SIZE = size;
+      numPoints = 1;
       reset();
     }
     
     // Random parameters governing the overall shape of the island
-    public function newIsland(islandType:String, pointType:String, seed:int, variant:int):void {
+    public function newIsland(islandType:String, pointType:String, numPoints_:int, seed:int, variant:int):void {
       islandShape = IslandShape['make'+islandType](seed);
       pointSelector = PointSelector['generate'+pointType](SIZE, seed);
+      needsMoreRandomness = PointSelector.needsMoreRandomness(pointType);
+      numPoints = numPoints_;
       mapRandom.seed = variant;
     }
 
@@ -114,7 +118,7 @@ package {
         (["Place points...",
           function():void {
             reset();
-            points = pointSelector(NUM_POINTS);
+            points = pointSelector(numPoints);
           }]);
 
       // Create a graph structure from the Voronoi edge list. The
@@ -432,6 +436,16 @@ package {
             var newElevation:Number = 0.01 + q.elevation;
             if (!q.water && !s.water) {
               newElevation += 1;
+              if (needsMoreRandomness) {
+                // HACK: the map looks nice because of randomness of
+                // points, randomness of rivers, and randomness of
+                // edges. Without random point selection, I needed to
+                // inject some more randomness to make maps look
+                // nicer. I'm doing it here, with elevations, but I
+                // think there must be a better way. This hack is only
+                // used with square/hexagon grids.
+                newElevation += mapRandom.nextDouble();
+              }
             }
             // If this point changed, we'll add it to the queue so
             // that we can process its neighbors too.
@@ -599,7 +613,7 @@ package {
           }
         }
       // Follow the downslope pointers to the coast. Limit to 100
-      // iterations although most of the time with NUM_POINTS=2000 it
+      // iterations although most of the time with numPoints==2000 it
       // only takes 20 iterations because most points are not far from
       // a coast.  TODO: can run faster by looking at
       // p.watershed.watershed instead of p.downslope.watershed.
@@ -844,6 +858,15 @@ import com.nodename.Delaunay.Voronoi;
 import de.polygonal.math.PM_PRNG;
 class PointSelector {
   static public var NUM_LLOYD_RELAXATIONS:int = 2;
+
+  // The square and hex grid point selection remove randomness from
+  // where the points are; we need to inject more randomness elsewhere
+  // to make the maps look better. I do this in the corner
+  // elevations. However I think more experimentation is needed.
+  static public function needsMoreRandomness(type:String):Boolean {
+    return type == 'Square' || type == 'Hexagon';
+  }
+
   
   // Generate points at random locations
   static public function generateRandom(size:int, seed:int):Function {

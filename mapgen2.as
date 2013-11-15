@@ -71,6 +71,7 @@ package {
 
     // Point distribution
     public var pointType:String = 'Relaxed';
+    public var numPoints:int = 2000;
     
     // GUI for controlling the map generation and view
     public var controls:Sprite = new Sprite();
@@ -110,11 +111,12 @@ package {
 
       addExportButtons();
       addViewButtons();
-      addGenerateButtons();
+      addIslandShapeButtons();
+      addPointSelectionButtons();
       addMiscLabels();
 
       map = new Map(SIZE);
-      go(islandType, pointType);
+      go(islandType, pointType, numPoints);
       
       render3dTimer.addEventListener(TimerEvent.TIMER, function (e:TimerEvent):void {
           // TODO: don't draw this while the map is being built
@@ -124,7 +126,7 @@ package {
 
     
     // Random parameters governing the overall shape of the island
-    public function newIsland(newIslandType:String, newPointType:String):void {
+    public function newIsland(newIslandType:String, newPointType:String, newNumPoints:int):void {
       var seed:int = 0, variant:int = 0;
       var t:Number = getTimer();
       
@@ -150,7 +152,8 @@ package {
       }
       islandType = newIslandType;
       pointType = newPointType;
-      map.newIsland(islandType, pointType, seed, variant);
+      numPoints = newNumPoints;
+      map.newIsland(islandType, pointType, numPoints, seed, variant);
     }
 
     
@@ -166,7 +169,7 @@ package {
     }
 
     
-    public function go(newIslandType:String, newPointType:String):void {
+    public function go(newIslandType:String, newPointType:String, newNumPoints:int):void {
       cancelCommands();
 
       roads = new Roads();
@@ -176,7 +179,7 @@ package {
       
       commandExecute("Shaping map...",
                      function():void {
-                       newIsland(newIslandType, newPointType);
+                       newIsland(newIslandType, newPointType, newNumPoints);
                      });
       
       commandExecute("Placing points...",
@@ -993,8 +996,7 @@ package {
       var top:XML =
         <map
           shape={islandSeedInput.text}
-          islandType={islandType} pointType={pointType}
-          size={Map.NUM_POINTS}>
+          islandType={islandType} pointType={pointType} size={numPoints}>
           <generator
              url="http://www-cs-students.stanford.edu/~amitp/game-programming/polygon-map-generation/"
              timestamp={new Date().toUTCString()} />
@@ -1106,7 +1108,7 @@ package {
     }
 
     
-    public function addGenerateButtons():void {
+    public function addIslandShapeButtons():void {
       var y:int = 4;
       var islandShapeLabel:TextField = makeButton("Island Shape:", 25, y, 150, null);
 
@@ -1119,7 +1121,7 @@ package {
       islandSeedInput.type = TextFieldType.INPUT;
       islandSeedInput.addEventListener(KeyboardEvent.KEY_UP, function (e:KeyboardEvent):void {
           if (e.keyCode == 13) {
-            go(islandType, pointType);
+            go(islandType, pointType, numPoints);
           }
         });
 
@@ -1131,7 +1133,7 @@ package {
       function setIslandTypeTo(type:String):Function {
         return function(e:Event):void {
           markActiveIslandShape(type);
-          go(type, pointType);
+          go(type, pointType, numPoints);
         }
       }
       
@@ -1152,14 +1154,16 @@ package {
                                        ( (Math.random()*100000).toFixed(0)
                                          + "-"
                                          + (1 + Math.floor(9*Math.random())).toFixed(0) );
-                                     go(islandType, pointType);
+                                     go(islandType, pointType, numPoints);
                                    }));
       controls.addChild(mapTypes.Radial);
       controls.addChild(mapTypes.Perlin);
       controls.addChild(mapTypes.Square);
       controls.addChild(mapTypes.Blob);
+    }
 
 
+    public function addPointSelectionButtons():void {
       function markActivePointSelection(newPointType:String):void {
         pointTypes[pointType].backgroundColor = 0xffffcc;
         pointTypes[newPointType].backgroundColor = 0xffff00;
@@ -1168,7 +1172,7 @@ package {
       function setPointsTo(type:String):Function {
         return function(e:Event):void {
           markActivePointSelection(type);
-          go(islandType, type);
+          go(islandType, type, numPoints);
         }
       }
       
@@ -1186,6 +1190,32 @@ package {
       controls.addChild(pointTypes.Relaxed);
       controls.addChild(pointTypes.Square);
       controls.addChild(pointTypes.Hexagon);
+
+      function markActiveNumPoints(newNumPoints:int):void {
+        pointCounts[""+numPoints].backgroundColor = 0xffffcc;
+        pointCounts[""+newNumPoints].backgroundColor = 0xffff00;
+      }
+
+      function setNumPointsTo(num:int):Function {
+        return function(e:Event):void {
+          markActiveNumPoints(num);
+          go(islandType, pointType, num);
+        }
+      }
+      
+      var pointCounts:Object = {
+        '500': makeButton("500", 23, y+142, 24, setNumPointsTo(500)),
+        '1000': makeButton("1000", 49, y+142, 32, setNumPointsTo(1000)),
+        '2000': makeButton("2000", 83, y+142, 32, setNumPointsTo(2000)),
+        '4000': makeButton("4000", 117, y+142, 32, setNumPointsTo(4000)),
+        '8000': makeButton("8000", 151, y+142, 32, setNumPointsTo(8000))
+      };
+      markActiveNumPoints(numPoints);
+      controls.addChild(pointCounts['500']);
+      controls.addChild(pointCounts['1000']);
+      controls.addChild(pointCounts['2000']);
+      controls.addChild(pointCounts['4000']);
+      controls.addChild(pointCounts['8000']);
     }
 
     
