@@ -1269,7 +1269,7 @@ package {
                
     public function addExportButtons():void {
       var y:Number = 450;
-      controls.addChild(makeButton("Export Bitmaps:", 25, y, 150, null));
+      controls.addChild(makeButton("Export byte arrays:", 25, y, 150, null));
                
       controls.addChild(makeButton("Elevation", 50, y+22, 100,
                           function (e:Event):void {
