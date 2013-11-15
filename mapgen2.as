@@ -70,7 +70,7 @@ package {
     static public var islandSeedInitial:String = "85882-8";
 
     // Point distribution
-    public var pointType:String = 'Random';
+    public var pointType:String = 'Relaxed';
     
     // GUI for controlling the map generation and view
     public var controls:Sprite = new Sprite();
@@ -1108,7 +1108,7 @@ package {
     
     public function addGenerateButtons():void {
       var y:int = 4;
-      var islandShapeButton:TextField = makeButton("Island Shape:", 25, y, 150, null);
+      var islandShapeLabel:TextField = makeButton("Island Shape:", 25, y, 150, null);
 
       var seedLabel:TextField = makeButton("Shape #", 20, y+22, 50, null);
       
@@ -1143,7 +1143,7 @@ package {
       };
       markActiveIslandShape(islandType);
       
-      controls.addChild(islandShapeButton);
+      controls.addChild(islandShapeLabel);
       controls.addChild(seedLabel);
       controls.addChild(islandSeedInput);
       controls.addChild(makeButton("Random", 125, y+22, 56,
@@ -1158,11 +1158,39 @@ package {
       controls.addChild(mapTypes.Perlin);
       controls.addChild(mapTypes.Square);
       controls.addChild(mapTypes.Blob);
+
+
+      function markActivePointSelection(newPointType:String):void {
+        pointTypes[pointType].backgroundColor = 0xffffcc;
+        pointTypes[newPointType].backgroundColor = 0xffff00;
+      }
+
+      function setPointsTo(type:String):Function {
+        return function(e:Event):void {
+          markActivePointSelection(type);
+          go(islandType, type);
+        }
+      }
+      
+      var pointTypes:Object = {
+        'Random': makeButton("Random", 16, y+120, 50, setPointsTo('Random')),
+        'Relaxed': makeButton("Relaxed", 68, y+120, 48, setPointsTo('Relaxed')),
+        'Square': makeButton("Square", 118, y+120, 44, setPointsTo('Square')),
+        'Hexagon': makeButton("Hex", 164, y+120, 28, setPointsTo('Hexagon'))
+      };
+      markActivePointSelection(pointType);
+
+      var pointTypeLabel:TextField = makeButton("Point Selection:", 25, y+100, 150, null);
+      controls.addChild(pointTypeLabel);
+      controls.addChild(pointTypes.Random);
+      controls.addChild(pointTypes.Relaxed);
+      controls.addChild(pointTypes.Square);
+      controls.addChild(pointTypes.Hexagon);
     }
 
     
     public function addViewButtons():void {
-      var y:int = 300;
+      var y:int = 200;
 
       function markViewButton(mode:String):void {
         views[mapMode].backgroundColor = 0xffffcc;
