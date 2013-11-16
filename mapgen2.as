@@ -336,7 +336,7 @@ package {
         }
       }
 
-      var x:Number = 23, y:Number = 140, width:Number = 154;
+      var x:Number = 23, y:Number = 200, width:Number = 154;
       drawDistribution(x, y, landTypeBucket, landTypeColor, width, 20);
       drawDistribution(x, y+25, biomeBucket, biomeColor, width, 20);
 
@@ -1220,7 +1220,7 @@ package {
 
     
     public function addViewButtons():void {
-      var y:int = 200;
+      var y:int = 330;
 
       function markViewButton(mode:String):void {
         views[mapMode].backgroundColor = 0xffffcc;
@@ -1261,7 +1261,7 @@ package {
 
 
     public function addMiscLabels():void {
-      controls.addChild(makeButton("Distribution:", 50, 120, 100, null));
+      controls.addChild(makeButton("Distribution:", 50, 180, 100, null));
       statusBar = makeButton("", SIZE/2-50, 10, 100, null);
       addChild(statusBar);
     }
