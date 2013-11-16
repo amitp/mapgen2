@@ -67,7 +67,10 @@ package {
     // type of island. The islandShape function uses both of them to
     // determine whether any point should be water or land.
     public var islandType:String = 'Perlin';
-    static public var islandSeedInitial:String = "85882-1";
+    static public var islandSeedInitial:String = "85882-8";
+
+    // Point distribution
+    public var pointType:String = 'Random';
     
     // GUI for controlling the map generation and view
     public var controls:Sprite = new Sprite();
@@ -111,7 +114,7 @@ package {
       addMiscLabels();
 
       map = new Map(SIZE);
-      go(islandType);
+      go(islandType, pointType);
       
       render3dTimer.addEventListener(TimerEvent.TIMER, function (e:TimerEvent):void {
           // TODO: don't draw this while the map is being built
@@ -121,7 +124,7 @@ package {
 
     
     // Random parameters governing the overall shape of the island
-    public function newIsland(type:String):void {
+    public function newIsland(newIslandType:String, newPointType:String):void {
       var seed:int = 0, variant:int = 0;
       var t:Number = getTimer();
       
@@ -145,8 +148,9 @@ package {
         seed %= 100000;
         variant = 1+Math.floor(9*Math.random());
       }
-      islandType = type;
-      map.newIsland(type, seed, variant);
+      islandType = newIslandType;
+      pointType = newPointType;
+      map.newIsland(islandType, pointType, seed, variant);
     }
 
     
@@ -162,7 +166,7 @@ package {
     }
 
     
-    public function go(type:String):void {
+    public function go(newIslandType:String, newPointType:String):void {
       cancelCommands();
 
       roads = new Roads();
@@ -172,7 +176,7 @@ package {
       
       commandExecute("Shaping map...",
                      function():void {
-                       newIsland(type);
+                       newIsland(newIslandType, newPointType);
                      });
       
       commandExecute("Placing points...",
@@ -995,7 +999,7 @@ package {
       var top:XML =
         <map
           shape={islandSeedInput.text}
-          type={islandType}
+          islandType={islandType} pointType={pointType}
           size={Map.NUM_POINTS}>
           <generator
              url="http://www-cs-students.stanford.edu/~amitp/game-programming/polygon-map-generation/"
@@ -1121,27 +1125,27 @@ package {
       islandSeedInput.type = TextFieldType.INPUT;
       islandSeedInput.addEventListener(KeyboardEvent.KEY_UP, function (e:KeyboardEvent):void {
           if (e.keyCode == 13) {
-            go(islandType);
+            go(islandType, pointType);
           }
         });
 
-      function markActiveIslandShape(type:String):void {
+      function markActiveIslandShape(newIslandType:String):void {
         mapTypes[islandType].backgroundColor = 0xffffcc;
-        mapTypes[type].backgroundColor = 0xffff00;
+        mapTypes[newIslandType].backgroundColor = 0xffff00;
       }
       
-      function switcher(type:String):Function {
+      function setIslandTypeTo(type:String):Function {
         return function(e:Event):void {
           markActiveIslandShape(type);
-          go(type);
+          go(type, pointType);
         }
       }
       
       var mapTypes:Object = {
-        'Radial': makeButton("Radial", 23, y+44, 40, switcher('Radial')),
-        'Perlin': makeButton("Perlin", 65, y+44, 35, switcher('Perlin')),
-        'Square': makeButton("Square", 102, y+44, 44, switcher('Square')),
-        'Blob': makeButton("Blob", 148, y+44, 29, switcher('Blob'))
+        'Radial': makeButton("Radial", 23, y+44, 40, setIslandTypeTo('Radial')),
+        'Perlin': makeButton("Perlin", 65, y+44, 35, setIslandTypeTo('Perlin')),
+        'Square': makeButton("Square", 102, y+44, 44, setIslandTypeTo('Square')),
+        'Blob': makeButton("Blob", 148, y+44, 29, setIslandTypeTo('Blob'))
       };
       markActiveIslandShape(islandType);
       
@@ -1154,7 +1158,7 @@ package {
                                        ( (Math.random()*100000).toFixed(0)
                                          + "-"
                                          + (1 + Math.floor(9*Math.random())).toFixed(0) );
-                                     go(islandType);
+                                     go(islandType, pointType);
                                    }));
       controls.addChild(mapTypes.Radial);
       controls.addChild(mapTypes.Perlin);
