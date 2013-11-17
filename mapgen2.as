@@ -14,6 +14,7 @@ package {
   import flash.net.FileReference;
   import flash.system.System;
   import de.polygonal.math.PM_PRNG;
+  import com.adobe.images.PNGEncoder;
 
   [SWF(width="800", height="600", frameRate=60)]
   public class mapgen2 extends Sprite {
@@ -985,6 +986,24 @@ package {
     }
 
 
+    // Export the map visible in the UI as a PNG. Turn OFF the noise
+    // layer because (1) it's scaled the wrong amount for the big
+    // image, and (2) it makes the resulting PNG much bigger, and (3)
+    // it makes it harder to apply your own texturing or noise later.
+    public function exportPng():ByteArray {
+      var exportBitmap:BitmapData = new BitmapData(2048, 2048);
+      var originalNoiseLayerVisible:Boolean = noiseLayer.visible;
+      
+      var m:Matrix = new Matrix();
+      m.scale(2048.0 / SIZE, 2048.0 / SIZE);
+      noiseLayer.visible = false;
+      exportBitmap.draw(this, m);
+      noiseLayer.visible = originalNoiseLayerVisible;
+      
+      return PNGEncoder.encode(exportBitmap);
+    }
+
+    
     // Export the graph data as XML.
     public function exportPolygons():String {
       // NOTE: For performance, we do not assemble the entire XML in
@@ -1284,9 +1303,14 @@ package {
                             new FileReference().save(makeExport('overrides'), 'overrides.data');
                           }));
 
-      controls.addChild(makeButton("Export XML", 25, y+100, 150,
+      controls.addChild(makeButton("Export:", 25, y+100, 50, null));
+      controls.addChild(makeButton("XML", 77, y+100, 35,
                           function (e:Event):void {
                             new FileReference().save(exportPolygons(), 'map.xml');
+                          }));
+      controls.addChild(makeButton("PNG", 114, y+100, 35,
+                          function (e:Event):void {
+                            new FileReference().save(exportPng(), 'map.png');
                           }));
     }
     

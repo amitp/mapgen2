@@ -46,8 +46,9 @@ Requirements
 
 These third-party requirements have been added to the ``third-party`` directory:
 
-* [as3delaunay](https://github.com/nodename/as3delaunay)
-* The AS3 version of [de.polygonal.math.PM_PRNG.as](http://lab.polygonal.de/2007/04/21/a-good-pseudo-random-number-generator-prng/)
+* [as3delaunay](https://github.com/nodename/as3delaunay) for the Voronoi algorithm
+* [as3corelib](https://github.com/mikechambers/as3corelib) for PNG export
+* The AS3 version of [de.polygonal.math.PM_PRNG.as](http://lab.polygonal.de/2007/04/21/a-good-pseudo-random-number-generator-prng/) for consistent random numbers
 
 Make sure you run ``git submodule update --init`` to check out the third-party libraries.
 
@@ -56,5 +57,5 @@ Compiling
 
 To compile ``mapgen2.as`` to ``mapgen2.swf``, use the following command:
 
-    mxmlc -source-path+=third-party/PM_PRNG -source-path+=third-party/as3delaunay/src mapgen2.as
+    mxmlc -source-path+=third-party/PM_PRNG -source-path+=third-party/as3delaunay/src -source-path+=third_party/as3corelib mapgen2.as
 
