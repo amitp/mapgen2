@@ -57,5 +57,5 @@ Compiling
 
 To compile ``mapgen2.as`` to ``mapgen2.swf``, use the following command:
 
-    mxmlc -source-path+=third-party/PM_PRNG -source-path+=third-party/as3delaunay/src -source-path+=third_party/as3corelib mapgen2.as
+    mxmlc -source-path+=third-party/PM_PRNG -source-path+=third-party/as3delaunay/src -source-path+=third-party/as3corelib/src mapgen2.as
 
