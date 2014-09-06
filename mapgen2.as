@@ -489,14 +489,15 @@ package {
         graphicsData = new Vector.<IGraphicsData>();
         for each (p in map.centers) {
             if (p.ocean) continue;
+            // Each polygon will be drawn as a series of triangles,
+            // where the vertices are the center of the polygon and
+            // the two endpoints of the edge.
             for each (edge in p.borders) {
                 var color:int = colors[p.biome] || 0;
                 if (colorFunction != null) {
                   color = colorFunction(color, p, q, edge);
                 }
 
-                // We'll draw two triangles: center - corner0 -
-                // midpoint and center - midpoint - corner1.
                 var corner0:Corner = edge.v0;
                 var corner1:Corner = edge.v1;
 
@@ -505,11 +506,12 @@ package {
                   continue;
                 }
 
+                // We already have elevations for corners and polygon centers:
                 var zp:Number = zScale*p.elevation;
                 var z0:Number = zScale*corner0.elevation;
                 var z1:Number = zScale*corner1.elevation;
                 triangles3d.push({
-                    a:new Vector3D(p.point.x, p.point.y, zp),
+                      a:new Vector3D(p.point.x, p.point.y, zp),
                       b:new Vector3D(corner0.point.x, corner0.point.y, z0),
                       c:new Vector3D(corner1.point.x, corner1.point.y, z1),
                       rA:null,
