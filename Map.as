@@ -938,7 +938,7 @@ class PointSelector {
   }
 
   
-  // Generate points on a square grid
+  // Generate points on a hexagon grid
   static public function generateHexagon(size:int, seed:int):Function {
     return function(numPoints:int):Vector.<Point> {
       var points:Vector.<Point> = new Vector.<Point>();
