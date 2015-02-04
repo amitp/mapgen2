@@ -622,8 +622,10 @@ package {
         for each (q in corners) {
             if (!q.ocean && !q.coast && !q.watershed.coast) {
               r = q.downslope.watershed;
-              if (!r.ocean) q.watershed = r;
-              changed = true;
+              if (!r.ocean) {
+                q.watershed = r;
+                changed = true;
+              }
             }
           }
         if (!changed) break;
