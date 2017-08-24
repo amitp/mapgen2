@@ -1,3 +1,5 @@
+[![No Maintenance Intended](http://unmaintained.tech/badge.svg)](http://unmaintained.tech/)
+
 After working on a [Perlin-noise-based map
 generator](http://simblob.blogspot.com/2010/01/simple-map-generation.html)
 I had wanted something with islands and rivers and volcanoes and
