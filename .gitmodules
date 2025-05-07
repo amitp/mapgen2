@@ -1,7 +1,7 @@
 [submodule "third-party/as3delaunay"]
 	path = third-party/as3delaunay
-	url = git://github.com/nodename/as3delaunay.git
+	url = https://github.com/nodename/as3delaunay.git
 [submodule "third-party/as3corelib"]
 	path = third-party/as3corelib
-	url = git://github.com/mikechambers/as3corelib.git
+	url = https://github.com/mikechambers/as3corelib.git
 
