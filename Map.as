@@ -945,7 +945,7 @@ class PointSelector {
       var N:int = Math.sqrt(numPoints);
       for (var x:int = 0; x < N; x++) {
         for (var y:int = 0; y < N; y++) {
-          points.push(new Point((0.5 + x)/N * size, (0.25 + 0.5*x%2 + y)/N * size));
+          points.push(new Point((0.5 + x)/N * size, (0.25 + 0.5 * (x%2) + y)/N * size));
         }
       }
       return points;
